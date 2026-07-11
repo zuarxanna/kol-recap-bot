@@ -78,43 +78,50 @@ Written in **TypeScript** (ESM, `strict` mode). `tsc` compiles `src/` + `db/` to
 contract, so adding a platform never touches the core.
 
 ```
-tsconfig.json          TypeScript config (NodeNext, strict) -> outputs to dist/
-db/                    DATA ONLY (JSON) — read/written at runtime via process.cwd()/db
-  kols.json            real data (gitignored; copy from kols.example.json)
-  kols.example.json    committed template
-  campaigns.json       real data (gitignored; copy from campaigns.example.json)
-  campaigns.example.json committed template
-src/
-  types.ts             shared types (ContentRecord, FetchDiagnostic, ...); re-exports Kol/Campaign from model/
-  index.ts             ENTRY: Telegram bot (telegraf, long-polling)
-  recap/               recap feature (one folder per domain)
-    index.ts           re-exports the builder facade: import { runRecap } from './recap/index.js'
-    builder/
-      index.ts
-      recap.ts         ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
-    service/
-      index.ts
-      RecapService.ts  orchestrator; owns the central hashtag filter + sort (DIP)
-  csvwriter/
-    index.ts
-    CsvWriter.ts       records -> CSV (21-col team template)
-  model/               data-model classes (sibling of adapter); one folder per domain
-    index.ts           re-exports Model + all models: import { Kol, Campaign } from './model/index.js'
-    Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
-    kol/
-      index.ts
-      Kol.ts           extends Model (+ findByIg)
-    campaign/
-      index.ts
-      Campaign.ts      extends Model (+ active/activate, single-active invariant)
-  adapter/
-    index.ts           re-exports PlatformAdapter + all adapters
-    PlatformAdapter.ts  abstract base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
-    instagram/InstagramAdapter.ts  Apify apify/instagram-reel-scraper
-    tiktok/TikTokAdapter.ts        Apify clockworks/tiktok-scraper
-    youtube/YouTubeAdapter.ts      YouTube Data API v3 (free, official — NOT Apify)
-dist/                  compiled JavaScript (gitignored; produced by `npm run build`)
-out/                   generated CSVs (gitignored)
+kol-recap-bot/
+├── tsconfig.json                    # TypeScript config (NodeNext, strict) -> dist/
+├── db/                              # DATA ONLY (JSON); read/written at runtime via process.cwd()/db
+│   ├── kols.json                    # real data (gitignored; copy from the .example)
+│   ├── kols.example.json            # committed template
+│   ├── campaigns.json               # real data (gitignored; copy from the .example)
+│   └── campaigns.example.json       # committed template
+├── src/
+│   ├── types.ts                     # shared types; re-exports Kol/Campaign from model/
+│   ├── index.ts                     # ENTRY: Telegram bot (telegraf, long-polling)
+│   ├── recap/                       # recap feature (barrel per domain)
+│   │   ├── index.ts                 # re-exports the builder facade (runRecap)
+│   │   ├── builder/
+│   │   │   ├── index.ts
+│   │   │   └── recap.ts             # ENTRY + composition root: wires adapters -> service; CLI
+│   │   └── service/
+│   │       ├── index.ts
+│   │       └── RecapService.ts      # orchestrator; central hashtag filter + sort (DIP)
+│   ├── csvwriter/
+│   │   ├── index.ts
+│   │   └── CsvWriter.ts             # records -> CSV (21-col team template)
+│   ├── model/                       # ActiveRecord data models (barrel per domain)
+│   │   ├── index.ts                 # re-exports Model + all models
+│   │   ├── Model.ts                 # abstract base: id/created_at, file-backed CRUD
+│   │   ├── kol/
+│   │   │   ├── index.ts
+│   │   │   └── Kol.ts               # extends Model (+ findByIg)
+│   │   └── campaign/
+│   │       ├── index.ts
+│   │       └── Campaign.ts          # extends Model (+ active/activate invariant)
+│   └── adapter/                     # platform adapters behind one contract (OCP)
+│       ├── index.ts                 # re-exports PlatformAdapter + all adapters
+│       ├── PlatformAdapter.ts       # abstract contract: canHandle / fetchContent
+│       ├── instagram/
+│       │   ├── index.ts
+│       │   └── InstagramAdapter.ts  # Apify apify/instagram-reel-scraper
+│       ├── tiktok/
+│       │   ├── index.ts
+│       │   └── TikTokAdapter.ts     # Apify clockworks/tiktok-scraper
+│       └── youtube/
+│           ├── index.ts
+│           └── YouTubeAdapter.ts    # YouTube Data API v3 (free, official)
+├── dist/                            # compiled JS (gitignored; npm run build)
+└── out/                             # generated CSVs (gitignored)
 ```
 
 **Adding a platform = a new adapter subclass + one `adapters.push(...)` in
