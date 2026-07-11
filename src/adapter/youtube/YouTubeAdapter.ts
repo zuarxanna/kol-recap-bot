@@ -1,5 +1,5 @@
-import { PlatformAdapter } from './PlatformAdapter.js';
-import type { Campaign, ContentRecord, FetchDiagnostic, FetchResult, Kol } from '../types.js';
+import { PlatformAdapter } from '../PlatformAdapter.js';
+import type { Campaign, ContentRecord, FetchDiagnostic, FetchResult, Kol } from '../../types.js';
 
 const API = 'https://www.googleapis.com/youtube/v3';
 

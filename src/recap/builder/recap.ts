@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { InstagramAdapter, TikTokAdapter, YouTubeAdapter } from './adapters/index.js';
-import { CsvWriter } from './CsvWriter.js';
-import { RecapService } from './RecapService.js';
-import type { PlatformAdapter } from './adapters/index.js';
-import type { RecapResult, RunOptions } from './types.js';
+import { InstagramAdapter, TikTokAdapter, YouTubeAdapter } from '../../adapter/index.js';
+import { CsvWriter } from '../../csvwriter/index.js';
+import { RecapService } from '../service/index.js';
+import type { PlatformAdapter } from '../../adapter/index.js';
+import type { RecapResult, RunOptions } from '../../types.js';
 
 /**
  * Composition root: assemble the active adapters + writer into a {@link RecapService}.
@@ -50,7 +50,7 @@ export async function runRecap(options?: RunOptions): Promise<RecapResult> {
   return buildService().run(options);
 }
 
-// --- CLI: run directly (tsx src/recap.ts, or node dist/src/recap.js) ---
+// --- CLI: run directly (tsx src/recap/builder/recap.ts, or node dist/src/recap/builder/recap.js) ---
 const runDirect = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (runDirect) {
   try {

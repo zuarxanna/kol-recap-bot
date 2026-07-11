@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Telegraf, Markup, Context } from 'telegraf';
-import { runRecap } from './recap.js';
+import { runRecap } from './recap/index.js';
 import { Campaign, Kol } from './model/index.js';
 import type { ContentRecord, KolResult } from './types.js';
 

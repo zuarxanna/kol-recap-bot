@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Campaign, ContentRecord, CsvRow } from './types.js';
+import type { Campaign, ContentRecord, CsvRow } from '../types.js';
 
 /**
  * Writes normalized records to the team's 21-column recap CSV template.

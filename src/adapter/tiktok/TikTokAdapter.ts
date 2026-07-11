@@ -1,6 +1,6 @@
 import { ApifyClient } from 'apify-client';
-import { PlatformAdapter } from './PlatformAdapter.js';
-import type { Campaign, ContentRecord, FetchResult, Kol } from '../types.js';
+import { PlatformAdapter } from '../PlatformAdapter.js';
+import type { Campaign, ContentRecord, FetchResult, Kol } from '../../types.js';
 
 const ACTOR = 'clockworks/tiktok-scraper';
 

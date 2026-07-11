@@ -86,31 +86,39 @@ db/                    DATA ONLY (JSON) — read/written at runtime via process.
   campaigns.example.json committed template
 src/
   types.ts             shared types (ContentRecord, FetchDiagnostic, ...); re-exports Kol/Campaign from model/
-  recap.ts             ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
-  bot.ts               ENTRY: Telegram bot (telegraf, long-polling)
-  RecapService.ts      orchestrator; owns the central hashtag filter + sort (DIP)
-  CsvWriter.ts         records -> CSV (21-col team template)
-  model/               data-model classes (sibling of adapters); one folder per domain
+  index.ts             ENTRY: Telegram bot (telegraf, long-polling)
+  recap/               recap feature (one folder per domain)
+    index.ts           re-exports the builder facade: import { runRecap } from './recap/index.js'
+    builder/
+      index.ts
+      recap.ts         ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
+    service/
+      index.ts
+      RecapService.ts  orchestrator; owns the central hashtag filter + sort (DIP)
+  csvwriter/
+    index.ts
+    CsvWriter.ts       records -> CSV (21-col team template)
+  model/               data-model classes (sibling of adapter); one folder per domain
     index.ts           re-exports Model + all models: import { Kol, Campaign } from './model/index.js'
     Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
-    Kol/
+    kol/
       index.ts
       Kol.ts           extends Model (+ findByIg)
-    Campaign/
+    campaign/
       index.ts
       Campaign.ts      extends Model (+ active/activate, single-active invariant)
-  adapters/
+  adapter/
     index.ts           re-exports PlatformAdapter + all adapters
     PlatformAdapter.ts  abstract base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
-    InstagramAdapter.ts Apify apify/instagram-reel-scraper
-    TikTokAdapter.ts    Apify clockworks/tiktok-scraper
-    YouTubeAdapter.ts   YouTube Data API v3 (free, official — NOT Apify)
+    instagram/InstagramAdapter.ts  Apify apify/instagram-reel-scraper
+    tiktok/TikTokAdapter.ts        Apify clockworks/tiktok-scraper
+    youtube/YouTubeAdapter.ts      YouTube Data API v3 (free, official — NOT Apify)
 dist/                  compiled JavaScript (gitignored; produced by `npm run build`)
 out/                   generated CSVs (gitignored)
 ```
 
 **Adding a platform = a new adapter subclass + one `adapters.push(...)` in
-`src/recap.ts`.** `RecapService`, `CsvWriter`, and `bot.ts` never change (Open/Closed
+`src/recap/builder/recap.ts`.** `RecapService`, `CsvWriter`, and `src/index.ts` never change (Open/Closed
 Principle). That is the whole point of the design.
 
 ### The adapter contract
@@ -295,7 +303,7 @@ Production (compile once, then run the plain JavaScript in `dist/`):
 
 ```bash
 npm run build     # tsc -> dist/
-npm run bot:prod  # node dist/src/bot.js
+npm run bot:prod  # node dist/src/index.js
 npm run recap:prod
 ```
 

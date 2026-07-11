@@ -6,11 +6,11 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "recap": "tsx src/recap.ts",
-    "bot": "tsx src/bot.ts",
-    "recap:prod": "node dist/src/recap.js",
-    "bot:prod": "node dist/src/bot.js",
-    "start": "node dist/src/bot.js"
+    "recap": "tsx src/recap/builder/recap.ts",
+    "bot": "tsx src/index.ts",
+    "recap:prod": "node dist/src/recap/builder/recap.js",
+    "bot:prod": "node dist/src/index.js",
+    "start": "node dist/src/index.js"
   },
   "dependencies": {
     "apify-client": "^2.9.3",

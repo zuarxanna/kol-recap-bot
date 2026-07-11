@@ -30,4 +30,4 @@ COPY --from=build /app/db ./db
 USER node
 
 # Long-polling: NO port/EXPOSE. Entry = the compiled bot (always-on).
-CMD ["node", "dist/src/bot.js"]
+CMD ["node", "dist/src/index.js"]

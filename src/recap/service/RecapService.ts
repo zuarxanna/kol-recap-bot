@@ -1,6 +1,6 @@
-import { Campaign, Kol } from './model/index.js';
-import type { CsvWriter } from './CsvWriter.js';
-import type { PlatformAdapter } from './adapters/index.js';
+import { Campaign, Kol } from '../../model/index.js';
+import type { CsvWriter } from '../../csvwriter/index.js';
+import type { PlatformAdapter } from '../../adapter/index.js';
 import type {
   ContentRecord,
   DiagnosticWithMatched,
@@ -8,7 +8,7 @@ import type {
   KolResult,
   RecapResult,
   RunOptions,
-} from './types.js';
+} from '../../types.js';
 
 /** Injected dependencies for a {@link RecapService}. */
 interface RecapServiceDeps {
