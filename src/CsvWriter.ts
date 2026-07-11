@@ -12,81 +12,68 @@
 // (Indonesian labels, "Commentar(s)" typo included). Do NOT translate them.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import type { Campaign, ContentRecord, CsvRow } from './types.js';
 
-/**
- * Writes normalized records to the team's 21-column recap CSV.
- */
+/** Writes normalized records to the team's 21-column recap CSV. */
 export class CsvWriter {
-  /** @type {string[]} Team template column order (verbatim — matches the client sheet). */
-  static HEADER = [
+  /** Team template column order (verbatim — matches the client sheet). */
+  static readonly HEADER: string[] = [
     'Kode', 'Tanggal Rekap', 'Nama Blogger/Vlogger', 'Domain Blog/Vlog', 'Source',
     'Source Type', 'Release Date', 'Month Entry', 'Title Article/Video', 'Link',
     'Product', 'Brand', 'Type Content', 'Tone Article', 'Commentar(s)', 'View(s)',
     'Value', 'Name of Event', 'JML', 'ID', 'YEAR',
   ];
 
-  /** @type {string[]} English month abbreviations for the Month Entry column. */
-  static MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** English month abbreviations for the Month Entry column. */
+  static readonly MONTHS: string[] = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
 
   /**
-   * @param {URL} outputDirUrl - Output folder URL (must end with "/", e.g. new URL('../out/', ...)).
+   * @param outputDir - Absolute path to the output folder (created if missing).
    */
-  constructor(outputDirUrl) {
-    this.outputDirUrl = outputDirUrl;
-  }
+  constructor(private readonly outputDir: string) {}
 
   /**
    * RFC-4180 cell escaping: wrap in quotes when the value contains a comma/quote/
    * newline; escape inner quotes as "".
-   * @param {*} v - Raw cell value.
-   * @returns {string} Escaped cell.
    */
-  #cell(v) {
+  #cell(v: string | number | null | undefined): string {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
-  /**
-   * Join an array of values into one escaped CSV row.
-   * @param {Array<*>} arr - Row values.
-   * @returns {string}
-   */
-  #row(arr) { return arr.map((v) => this.#cell(v)).join(','); }
+  /** Join an array of values into one escaped CSV row. */
+  #row(arr: CsvRow): string {
+    return arr.map((v) => this.#cell(v)).join(',');
+  }
 
-  /**
-   * Slugify a name for the output filename.
-   * @param {string} name
-   * @returns {string}
-   */
-  #slug(name) {
+  /** Slugify a name for the output filename. */
+  #slug(name: string): string {
     return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
   /**
    * Parse "YYYY-MM-DD" (WIB, from an adapter) into CSV date parts. Parses the string
    * directly (NOT new Date) so there is no further timezone shift.
-   * @param {string} iso - Date as "YYYY-MM-DD".
-   * @returns {{date: string, month: string, year: string}} e.g. { date:'27/06/2026', month:'Jun', year:'2026' }
    */
-  #dateParts(iso) {
+  #dateParts(iso: string): { date: string; month: string; year: string } {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
     if (!m) return { date: '', month: '', year: '' };
     const [, y, mo, d] = m;
-    return { date: `${d}/${mo}/${y}`, month: CsvWriter.MONTHS[Number(mo) - 1] || '', year: y };
+    return { date: `${d}/${mo}/${y}`, month: CsvWriter.MONTHS[Number(mo) - 1] ?? '', year: y ?? '' };
   }
 
   /**
    * Write normalized records (already filtered & sorted) to the campaign's CSV file.
-   * @param {import('./adapters/PlatformAdapter.js').ContentRecord[]} records
-   * @param {object} campaign - Active campaign (used for the filename).
-   * @returns {{outPath: string, rows: Array<Array<*>>}} Absolute output path + row arrays.
+   * @returns Absolute output path + the row arrays.
    */
-  write(records, campaign) {
+  write(records: ContentRecord[], campaign: Campaign): { outPath: string; rows: CsvRow[] } {
     const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // YYYY-MM-DD
     const recapDate = this.#dateParts(todayIso).date;
 
-    const rows = records.map((r) => {
+    const rows: CsvRow[] = records.map((r) => {
       const p = this.#dateParts(r.date);
       return [
         '',                    // Kode — manual
@@ -113,12 +100,12 @@ export class CsvWriter {
       ];
     });
 
-    const outUrl = new URL(`./${this.#slug(campaign.name)}_${todayIso}.csv`, this.outputDirUrl);
-    mkdirSync(this.outputDirUrl, { recursive: true });
+    const outPath = join(this.outputDir, `${this.#slug(campaign.name)}_${todayIso}.csv`);
+    mkdirSync(this.outputDir, { recursive: true });
     // The header is ALWAYS written even with 0 rows — the file must exist for manual work.
     const csv = [this.#row(CsvWriter.HEADER), ...rows.map((r) => this.#row(r))].join('\n') + '\n';
-    writeFileSync(outUrl, csv);
+    writeFileSync(outPath, csv);
 
-    return { outPath: fileURLToPath(outUrl), rows };
+    return { outPath, rows };
   }
 }

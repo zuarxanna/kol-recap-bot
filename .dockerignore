@@ -2,6 +2,9 @@
 node_modules
 npm-debug.log
 
+# build output — regenerated inside the build stage
+dist
+
 # secrets — passed via env_file, do NOT bake into the image
 .env
 

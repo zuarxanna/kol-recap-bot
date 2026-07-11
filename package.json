@@ -4,12 +4,22 @@
   "description": "KOL metrics recap — Telegram bot + Apify + YouTube Data API, local JSON storage",
   "type": "module",
   "scripts": {
-    "recap": "node src/recap.js",
-    "bot": "node src/bot.js"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "recap": "tsx src/recap.ts",
+    "bot": "tsx src/bot.ts",
+    "recap:prod": "node dist/src/recap.js",
+    "bot:prod": "node dist/src/bot.js",
+    "start": "node dist/src/bot.js"
   },
   "dependencies": {
     "apify-client": "^2.9.3",
     "dotenv": "^17.4.2",
     "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }

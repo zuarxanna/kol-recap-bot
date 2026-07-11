@@ -1,6 +1,6 @@
-// RecapService — the orchestrator. It knows no concrete platform (DIP): it only
-// knows the PlatformAdapter contract. Adding TikTok/YouTube = inject a new adapter;
-// this file does NOT change (OCP).
+// RecapService — the orchestrator. It knows no concrete platform (DIP): it only knows
+// the PlatformAdapter contract. Adding TikTok/YouTube = inject a new adapter; this file
+// does NOT change (OCP).
 //
 // Flow: active campaign -> KOLs processed SEQUENTIALLY (one at a time, so Apify
 // concurrency is capped at the number of adapters, not KOLs x adapters) -> but the
@@ -9,38 +9,45 @@
 // -> CsvWriter -> result.
 
 import { activeCampaign, loadKols } from '../db/db.js';
+import type { CsvWriter } from './CsvWriter.js';
+import type { PlatformAdapter } from './adapters/PlatformAdapter.js';
+import type {
+  Campaign,
+  ContentRecord,
+  DiagnosticWithMatched,
+  FetchDiagnostic,
+  Kol,
+  KolResult,
+  RecapResult,
+  RunOptions,
+} from './types.js';
 
-/**
- * @typedef {import('./adapters/PlatformAdapter.js').ContentRecord} ContentRecord
- * @typedef {import('./adapters/PlatformAdapter.js').FetchDiagnostic} FetchDiagnostic
- */
+/** Injected dependencies for a RecapService. */
+interface RecapServiceDeps {
+  adapters: PlatformAdapter[];
+  csvWriter: CsvWriter;
+}
 
-/**
- * Orchestrates a recap run across all registered platform adapters.
- */
+/** Result of running one adapter for one KOL, after the central filter/placeholder. */
+interface AdapterRunResult {
+  diagnostic: DiagnosticWithMatched;
+  records: ContentRecord[];
+}
+
+/** Orchestrates a recap run across all registered platform adapters. */
 export class RecapService {
-  /**
-   * @param {object} deps
-   * @param {import('./adapters/PlatformAdapter.js').PlatformAdapter[]} deps.adapters - Injected adapters.
-   * @param {import('./CsvWriter.js').CsvWriter} deps.csvWriter - Injected CSV writer.
-   */
-  constructor({ adapters, csvWriter }) {
+  private readonly adapters: PlatformAdapter[];
+  private readonly csvWriter: CsvWriter;
+
+  constructor({ adapters, csvWriter }: RecapServiceDeps) {
     if (!adapters?.length) throw new Error('RecapService requires at least 1 adapter');
     if (!csvWriter) throw new Error('RecapService requires a csvWriter');
     this.adapters = adapters;
     this.csvWriter = csvWriter;
   }
 
-  /**
-   * Run the recap for the active campaign.
-   * @param {object} [options]
-   * @param {(result: {kol: object, records: ContentRecord[], diagnostics: FetchDiagnostic[]}) => (void|Promise<void>)} [options.onKolDone]
-   *   Called after each KOL finishes (all its platforms). Used by the bot for progress
-   *   streaming. It is awaited, and errors thrown in it are swallowed (a progress
-   *   failure must not fail the run).
-   * @returns {Promise<{campaign: object, hashtag: string, since: string, records: ContentRecord[], rows: Array, diagnostics: FetchDiagnostic[], totalCost: number, outPath: string}>}
-   */
-  async run({ onKolDone } = {}) {
+  /** Run the recap for the active campaign. */
+  async run({ onKolDone }: RunOptions = {}): Promise<RecapResult> {
     const campaign = activeCampaign();
     if (!campaign) throw new Error('No campaign with status=active in db/campaigns.json');
 
@@ -54,11 +61,15 @@ export class RecapService {
 
     // SEQUENTIAL per KOL (await one at a time). Inside #processKol, adapters run in
     // parallel. Each finished KOL fires onKolDone (in-order progress streaming).
-    const perKol = [];
+    const perKol: KolResult[] = [];
     for (const kol of kols) {
       const res = await this.#processKol(kol, campaign, hashtag);
       if (onKolDone) {
-        try { await onKolDone(res); } catch { /* progress failed, ignore */ }
+        try {
+          await onKolDone(res);
+        } catch {
+          /* progress failed, ignore */
+        }
       }
       perKol.push(res);
     }
@@ -74,14 +85,8 @@ export class RecapService {
     return { campaign, hashtag, since, records: matchedRecords, rows, diagnostics, totalCost, outPath };
   }
 
-  /**
-   * Process one KOL: every adapter that canHandle it runs in PARALLEL.
-   * @param {object} kol - KOL record.
-   * @param {object} campaign - Active campaign.
-   * @param {string} hashtag - Lowercased campaign hashtag (no "#").
-   * @returns {Promise<{kol: object, records: ContentRecord[], diagnostics: FetchDiagnostic[]}>}
-   */
-  async #processKol(kol, campaign, hashtag) {
+  /** Process one KOL: every adapter that canHandle it runs in PARALLEL. */
+  async #processKol(kol: Kol, campaign: Campaign, hashtag: string): Promise<KolResult> {
     const adapters = this.adapters.filter((a) => a.canHandle(kol)); // no handle -> skip (no row)
     const perAdapter = await Promise.all(
       adapters.map((a) => this.#runAdapter(a, kol, campaign, hashtag)),
@@ -94,23 +99,29 @@ export class RecapService {
   }
 
   /**
-   * Run one adapter for one KOL: fetch (wrapped in try/catch so one adapter's error
-   * does not kill the run), then apply the CENTRAL hashtag filter / placeholder.
-   * @param {import('./adapters/PlatformAdapter.js').PlatformAdapter} adapter
-   * @param {object} kol - KOL record.
-   * @param {object} campaign - Active campaign.
-   * @param {string} hashtag - Lowercased campaign hashtag (no "#").
-   * @returns {Promise<{diagnostic: FetchDiagnostic & {matched: number}, records: ContentRecord[]}>}
+   * Run one adapter for one KOL: fetch (wrapped in try/catch so one adapter's error does
+   * not kill the run), then apply the CENTRAL hashtag filter / placeholder.
    */
-  async #runAdapter(adapter, kol, campaign, hashtag) {
-    let diagnostic;
-    let records;
+  async #runAdapter(
+    adapter: PlatformAdapter,
+    kol: Kol,
+    campaign: Campaign,
+    hashtag: string,
+  ): Promise<AdapterRunResult> {
+    let diagnostic: FetchDiagnostic;
+    let records: ContentRecord[];
     try {
       ({ diagnostic, records } = await adapter.fetchContent(kol, campaign));
     } catch (e) {
       diagnostic = {
-        handle: adapter.handleFor(kol), name: kol.name, platform: adapter.platform,
-        scraped: 0, errored: 0, allError: true, firstError: e.message, cost: 0,
+        handle: adapter.handleFor(kol),
+        name: kol.name,
+        platform: adapter.platform,
+        scraped: 0,
+        errored: 0,
+        allError: true,
+        firstError: e instanceof Error ? e.message : String(e),
+        cost: 0,
       };
       records = [];
     }
@@ -129,7 +140,8 @@ export class RecapService {
     // Leaky by design (misses untagged content) — audited manually. Do NOT loosen it
     // without a deliberate decision.
     const matched = records.filter((r) =>
-      (r.hashtags || []).some((h) => String(h).toLowerCase() === hashtag));
+      (r.hashtags || []).some((h) => String(h).toLowerCase() === hashtag),
+    );
     return { diagnostic: { ...diagnostic, matched: matched.length }, records: matched };
   }
 
@@ -139,12 +151,8 @@ export class RecapService {
    * CsvWriter blanks Release Date/Month/YEAR (it cannot parse "-"). hashtags [] so it
    * would not pass the filter (it is pushed directly). JML stays 1 (hardcoded in
    * CsvWriter, a deliberate decision).
-   * @param {object} kol - KOL record.
-   * @param {import('./adapters/PlatformAdapter.js').PlatformAdapter} adapter
-   * @param {FetchDiagnostic} diagnostic
-   * @returns {ContentRecord}
    */
-  #placeholder(kol, adapter, diagnostic) {
+  #placeholder(kol: Kol, adapter: PlatformAdapter, diagnostic: FetchDiagnostic): ContentRecord {
     return {
       name: kol.name,
       platform: adapter.platform,

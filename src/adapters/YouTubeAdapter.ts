@@ -16,45 +16,53 @@
 //   hashtags=regex over title+description (NOT snippet.tags), type=Shorts/Video via duration.
 
 import { PlatformAdapter } from './PlatformAdapter.js';
+import type { Campaign, ContentRecord, FetchDiagnostic, FetchResult, Kol } from '../types.js';
 
 const API = 'https://www.googleapis.com/youtube/v3';
 
-/**
- * YouTube adapter backed by the official YouTube Data API v3 (free, quota-based).
- * @extends PlatformAdapter
- */
+/** Minimal shapes for the YouTube Data API responses (only the fields we read). */
+interface YtChannel {
+  contentDetails?: { relatedPlaylists?: { uploads?: string } };
+}
+interface YtPlaylistItem {
+  contentDetails?: { videoId?: string; videoPublishedAt?: string };
+}
+interface YtVideo {
+  id?: string;
+  snippet?: { title?: string; description?: string; publishedAt?: string };
+  statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
+  contentDetails?: { duration?: string };
+}
+interface YtListResponse<T> {
+  items?: T[];
+  nextPageToken?: string;
+  error?: { message?: string };
+}
+
+/** YouTube adapter backed by the official YouTube Data API v3 (free, quota-based). */
 export class YouTubeAdapter extends PlatformAdapter {
-  /**
-   * @param {string} apiKey - YouTube Data API v3 key.
-   */
-  constructor(apiKey) {
+  private readonly apiKey: string;
+
+  constructor(apiKey: string) {
     super();
     if (!apiKey) throw new Error('YouTubeAdapter requires YOUTUBE_API_KEY');
     this.apiKey = apiKey;
   }
 
-  /** @returns {string} */
-  get platform() { return 'YouTube'; }
+  get platform(): string {
+    return 'YouTube';
+  }
 
-  /**
-   * @param {object} kol
-   * @returns {boolean} True when the KOL has a YouTube channel handle.
-   */
-  canHandle(kol) { return Boolean(kol.youtube_channel && kol.youtube_channel.trim()); }
+  canHandle(kol: Kol): boolean {
+    return Boolean(kol.youtube_channel && kol.youtube_channel.trim());
+  }
 
-  /**
-   * @param {object} kol
-   * @returns {string} Cleaned YouTube handle (no "@", no URL path).
-   */
-  handleFor(kol) { return this.#normalizeHandle(kol.youtube_channel); }
+  handleFor(kol: Kol): string {
+    return this.#normalizeHandle(kol.youtube_channel);
+  }
 
-  /**
-   * Fetch a channel's uploads published since the campaign start.
-   * @param {object} kol - KOL record.
-   * @param {object} campaign - Active campaign.
-   * @returns {Promise<import('./PlatformAdapter.js').FetchResult>}
-   */
-  async fetchContent(kol, campaign) {
+  /** Fetch a channel's uploads published since the campaign start. */
+  async fetchContent(kol: Kol, campaign: Campaign): Promise<FetchResult> {
     const handle = this.#normalizeHandle(kol.youtube_channel);
     // WIDEN by 1 day: publishedAt is UTC, our date is WIB (+7). An early-morning WIB
     // post on day 1 is the previous day in UTC, so without widening it can be dropped.
@@ -62,7 +70,7 @@ export class YouTubeAdapter extends PlatformAdapter {
     const since = YouTubeAdapter.#minusOneDay(String(campaign.started_at || '').slice(0, 10));
     const sinceMs = Date.parse(`${since}T00:00:00Z`);
 
-    const diag = {
+    const diag: FetchDiagnostic = {
       handle,
       name: kol.name,
       platform: this.platform,
@@ -75,12 +83,11 @@ export class YouTubeAdapter extends PlatformAdapter {
 
     try {
       // 1. resolve @handle -> channelId + uploads playlist
-      const ch = await this.#get('channels', {
+      const ch = await this.#get<YtListResponse<YtChannel>>('channels', {
         part: 'contentDetails,snippet',
         forHandle: `@${handle}`,
       });
-      const chan = ch.items?.[0];
-      const uploads = chan?.contentDetails?.relatedPlaylists?.uploads;
+      const uploads = ch.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
       if (!uploads) {
         diag.allError = true;
         diag.firstError = `channel @${handle} not found`;
@@ -88,34 +95,37 @@ export class YouTubeAdapter extends PlatformAdapter {
       }
 
       // 2. page the uploads playlist, collect videoIds since `since` (newest first)
-      const ids = [];
-      let pageToken;
+      const ids: string[] = [];
+      let pageToken: string | undefined;
       let done = false;
       do {
-        const pl = await this.#get('playlistItems', {
+        const pl = await this.#get<YtListResponse<YtPlaylistItem>>('playlistItems', {
           part: 'contentDetails',
           playlistId: uploads,
           maxResults: '50',
           ...(pageToken ? { pageToken } : {}),
         });
-        for (const it of pl.items || []) {
-          const pub = Date.parse(it.contentDetails?.videoPublishedAt || '');
+        for (const it of pl.items ?? []) {
+          const pub = Date.parse(it.contentDetails?.videoPublishedAt ?? '');
           if (Number.isNaN(pub)) continue;
-          if (pub < sinceMs) { done = true; break; } // older than `since` -> stop
+          if (pub < sinceMs) {
+            done = true;
+            break;
+          } // older than `since` -> stop
           if (it.contentDetails?.videoId) ids.push(it.contentDetails.videoId);
         }
-        pageToken = done ? null : pl.nextPageToken;
+        pageToken = done ? undefined : pl.nextPageToken;
       } while (pageToken);
 
       // 3. batch videos.list (<=50 ids/call) -> stats + duration + snippet
-      const records = [];
+      const records: ContentRecord[] = [];
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50);
-        const vids = await this.#get('videos', {
+        const vids = await this.#get<YtListResponse<YtVideo>>('videos', {
           part: 'snippet,statistics,contentDetails',
           id: batch.join(','),
         });
-        for (const v of vids.items || []) records.push(this.#normalize(v, kol, handle));
+        for (const v of vids.items ?? []) records.push(this.#normalize(v, kol, handle));
       }
 
       diag.scraped = records.length;
@@ -125,21 +135,16 @@ export class YouTubeAdapter extends PlatformAdapter {
     } catch (e) {
       // one channel error must not kill the whole run — report it via the diagnostic
       diag.allError = true;
-      diag.firstError = e.message;
+      diag.firstError = e instanceof Error ? e.message : String(e);
       return { diagnostic: diag, records: [] };
     }
   }
 
-  /**
-   * GET a Data API resource with the API key; throws with a clear message on non-2xx.
-   * @param {string} resource - API resource (e.g. "channels").
-   * @param {Record<string,string>} params - Query params (key is added automatically).
-   * @returns {Promise<object>} Parsed JSON response.
-   */
-  async #get(resource, params) {
+  /** GET a Data API resource with the API key; throws with a clear message on non-2xx. */
+  async #get<T>(resource: string, params: Record<string, string>): Promise<T> {
     const qs = new URLSearchParams({ ...params, key: this.apiKey });
     const res = await fetch(`${API}/${resource}?${qs}`);
-    const data = await res.json().catch(() => ({}));
+    const data = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
     if (!res.ok) {
       const msg = data?.error?.message || `HTTP ${res.status}`;
       throw new Error(`YouTube ${resource}: ${msg}`);
@@ -147,24 +152,18 @@ export class YouTubeAdapter extends PlatformAdapter {
     return data;
   }
 
-  /**
-   * Map one raw video resource to a normalized ContentRecord.
-   * @param {object} v - Raw videos.list item.
-   * @param {object} kol - KOL record.
-   * @param {string} handle - YouTube handle.
-   * @returns {import('./PlatformAdapter.js').ContentRecord}
-   */
-  #normalize(v, kol, handle) {
-    const s = v.statistics || {};
+  /** Map one raw video resource to a normalized ContentRecord. */
+  #normalize(v: YtVideo, kol: Kol, handle: string): ContentRecord {
+    const s = v.statistics ?? {};
     return {
       name: kol.name,
       platform: this.platform,
       type: this.#isShort(v.contentDetails?.duration) ? 'Shorts' : 'Video',
       handle, // without @; CsvWriter renders `@handle`
       title: this.#toTitle(v.snippet?.title),
-      url: `https://www.youtube.com/watch?v=${v.id}`,
+      url: `https://www.youtube.com/watch?v=${v.id ?? ''}`,
       views: s.viewCount != null ? Number(s.viewCount) : '',
-      likes: s.likeCount != null ? Number(s.likeCount) : '',   // '' when likes are hidden
+      likes: s.likeCount != null ? Number(s.likeCount) : '', // '' when likes are hidden
       comments: s.commentCount != null ? Number(s.commentCount) : '', // '' when comments are disabled
       date: this.#toWibDate(v.snippet?.publishedAt),
       // YouTube has no structured hashtag array -> extract from title+description (NOT snippet.tags)
@@ -172,13 +171,9 @@ export class YouTubeAdapter extends PlatformAdapter {
     };
   }
 
-  /**
-   * Extract hashtags from free text -> [lowercase without "#"], deduped.
-   * @param {string} text
-   * @returns {string[]}
-   */
-  #extractHashtags(text) {
-    const set = new Set();
+  /** Extract hashtags from free text -> [lowercase without "#"], deduped. */
+  #extractHashtags(text: string): string[] {
+    const set = new Set<string>();
     for (const m of String(text).matchAll(/#[\p{L}\p{N}_]+/gu)) {
       set.add(m[0].slice(1).toLowerCase());
     }
@@ -189,45 +184,31 @@ export class YouTubeAdapter extends PlatformAdapter {
    * Heuristic Shorts detection (no official flag): ISO-8601 duration <= 60s = Shorts.
    * Known caveat: newer Shorts can run up to 3 min, so those > 60s are labeled Video
    * (fixed manually).
-   * @param {string} iso - ISO-8601 duration (e.g. "PT45S").
-   * @returns {boolean}
    */
-  #isShort(iso) {
+  #isShort(iso: string | undefined): boolean {
     const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(iso || ''));
     if (!m) return false;
-    const secs = (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0);
+    const secs = (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0));
     return secs > 0 && secs <= 60;
   }
 
-  /**
-   * Normalize "@handle" / URL / plain into a clean handle without "@" or path.
-   * @param {string} raw
-   * @returns {string}
-   */
-  #normalizeHandle(raw) {
+  /** Normalize "@handle" / URL / plain into a clean handle without "@" or path. */
+  #normalizeHandle(raw: string): string {
     let h = String(raw || '').trim();
     const at = h.lastIndexOf('@');
     if (at >= 0) h = h.slice(at + 1); // take everything after "@" (also handles URLs like .../@name)
-    return h.split(/[/?#]/)[0];
+    return h.split(/[/?#]/)[0] ?? '';
   }
 
-  /**
-   * Derive a title: first line of the video title, truncated so CSV cells stay small.
-   * @param {string} title
-   * @returns {string}
-   */
-  #toTitle(title) {
-    const first = String(title || '').split('\n')[0].trim();
+  /** Derive a title: first line of the video title, truncated so CSV cells stay small. */
+  #toTitle(title: string | undefined): string {
+    const first = String(title || '').split('\n')[0]!.trim();
     return first.length > 120 ? first.slice(0, 117) + '...' : first;
   }
 
-  /**
-   * Convert a UTC timestamp to a WIB (Asia/Jakarta) date string.
-   * @param {string} ts - UTC timestamp.
-   * @returns {string} "YYYY-MM-DD", or "" if unparseable.
-   */
-  #toWibDate(ts) {
-    const d = new Date(ts);
+  /** Convert a UTC timestamp to a WIB (Asia/Jakarta) date string. */
+  #toWibDate(ts: string | undefined): string {
+    const d = new Date(ts ?? '');
     return Number.isNaN(d.getTime())
       ? ''
       : d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
@@ -236,10 +217,8 @@ export class YouTubeAdapter extends PlatformAdapter {
   /**
    * Subtract one day from a "YYYY-MM-DD" string. Forces UTC ("Z") to avoid any
    * local-timezone shift.
-   * @param {string} iso - Date as "YYYY-MM-DD".
-   * @returns {string} Date minus one day, or the input if unparseable.
    */
-  static #minusOneDay(iso) {
+  static #minusOneDay(iso: string): string {
     const d = new Date(`${iso}T00:00:00Z`);
     if (Number.isNaN(d.getTime())) return iso;
     d.setUTCDate(d.getUTCDate() - 1);

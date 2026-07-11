@@ -31,14 +31,33 @@ exact shape the team already uses, so the remaining human work is just judgment 
 
 ## How it works (flow)
 
-```
-db/campaigns.json + db/kols.json
-   -> RecapService: active campaign -> each KOL -> each adapter that canHandle(kol)
-     -> adapter.fetchContent (IG/TikTok = Apify, YouTube = Data API v3)
-   -> CENTRAL auto-filter by campaign.hashtag (case-insensitive, in RecapService)
-   -> sort rows by KOL name
-   -> CsvWriter -> recap CSV (21-col team template, manual columns blank)
-   -> HUMAN (post-export, spreadsheet): tone, campaign constants, audit misses
+```mermaid
+flowchart TD
+  DB[("db/campaigns.json<br/>db/kols.json")] --> RS["RecapService<br/>(orchestrator)"]
+  RS --> AC{"active<br/>campaign?"}
+  AC -- none --> ERR["error: no active campaign"]
+  AC -- yes --> LOOP["for each KOL<br/>(sequential)"]
+
+  LOOP --> CH{"adapter<br/>canHandle(kol)?"}
+  CH -- no --> SKIP["skip — no row"]
+  CH -- yes --> FETCH["fetchContent<br/>(adapters run in parallel per KOL)"]
+
+  FETCH --> IG["InstagramAdapter<br/>Apify"]
+  FETCH --> TT["TikTokAdapter<br/>Apify"]
+  FETCH --> YT["YouTubeAdapter<br/>Data API v3 (optional)"]
+
+  IG --> FILTER
+  TT --> FILTER
+  YT --> FILTER{"central hashtag filter<br/>(case-insensitive)"}
+
+  FILTER -- matched --> SORT["sort rows by KOL name"]
+  FILTER -- "scraped &gt; 0, 0 match" --> MISS["no row<br/>(leaky tradeoff — audit manually)"]
+  FILTER -- "fetch failed" --> PLACE["placeholder row<br/>(data fields = '-')"]
+
+  SORT --> CSV["CsvWriter<br/>21-col team template"]
+  PLACE --> CSV
+  CSV --> OUT[["recap CSV in out/"]]
+  OUT --> HUMAN["HUMAN (spreadsheet):<br/>tone, campaign constants,<br/>audit missed content"]
 ```
 
 Key ideas:
@@ -54,40 +73,47 @@ Key ideas:
 
 ## Architecture
 
-Adapter pattern behind a single contract, so adding a platform never touches the core.
+Written in **TypeScript** (ESM, `strict` mode). `tsc` compiles `src/` + `db/` to
+`dist/`, and the app runs the compiled JavaScript. Adapter pattern behind a single
+contract, so adding a platform never touches the core.
 
 ```
+tsconfig.json          TypeScript config (NodeNext, strict) -> outputs to dist/
 db/
-  db.js                load/save JSON (loadCampaigns/saveCampaigns/loadKols/saveKols/activeCampaign/nextId)
+  db.ts                load/save JSON (loadCampaigns/saveCampaigns/loadKols/saveKols/activeCampaign/nextId)
   campaigns.json       real data (gitignored; copy from campaigns.example.json)
   kols.json            real data (gitignored; copy from kols.example.json)
   *.example.json       committed templates showing the data shape
 src/
-  recap.js             ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
-  bot.js               ENTRY: Telegram bot (telegraf, long-polling)
-  RecapService.js      orchestrator; owns the central hashtag filter + sort (DIP)
-  CsvWriter.js         records -> CSV (21-col team template)
+  types.ts             shared domain types (Kol, Campaign, ContentRecord, FetchDiagnostic, ...)
+  recap.ts             ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
+  bot.ts               ENTRY: Telegram bot (telegraf, long-polling)
+  RecapService.ts      orchestrator; owns the central hashtag filter + sort (DIP)
+  CsvWriter.ts         records -> CSV (21-col team template)
   adapters/
-    PlatformAdapter.js  base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
-    InstagramAdapter.js Apify apify/instagram-reel-scraper
-    TikTokAdapter.js    Apify clockworks/tiktok-scraper
-    YouTubeAdapter.js   YouTube Data API v3 (free, official — NOT Apify)
+    PlatformAdapter.ts  abstract base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
+    InstagramAdapter.ts Apify apify/instagram-reel-scraper
+    TikTokAdapter.ts    Apify clockworks/tiktok-scraper
+    YouTubeAdapter.ts   YouTube Data API v3 (free, official — NOT Apify)
+dist/                  compiled JavaScript (gitignored; produced by `npm run build`)
 out/                   generated CSVs (gitignored)
 ```
 
 **Adding a platform = a new adapter subclass + one `adapters.push(...)` in
-`src/recap.js`.** `RecapService`, `CsvWriter`, and `bot.js` never change (Open/Closed
+`src/recap.ts`.** `RecapService`, `CsvWriter`, and `bot.ts` never change (Open/Closed
 Principle). That is the whole point of the design.
 
 ### The adapter contract
 
-Every adapter's `fetchContent(kol, campaign)` returns `{ diagnostic, records[] }`:
+Every adapter extends the abstract `PlatformAdapter` and implements
+`fetchContent(kol, campaign): Promise<FetchResult>`, returning `{ diagnostic, records[] }`.
+The shapes are defined in `src/types.ts`:
 
-- **record** (PRE-filter): `{ name, platform, type, handle, title, url, views, likes,
-  comments, date: "YYYY-MM-DD", hashtags: [lowercase strings] }`. `date` MUST be
+- **`ContentRecord`** (PRE-filter): `{ name, platform, type, handle, title, url, views,
+  likes, comments, date: "YYYY-MM-DD", hashtags: string[] }`. `date` MUST be
   `YYYY-MM-DD` or the CSV blanks Release Date/Month/YEAR.
-- **diagnostic**: `{ handle, name, platform, scraped, errored, allError, firstError,
-  cost }`.
+- **`FetchDiagnostic`**: `{ handle, name, platform, scraped, errored, allError,
+  firstError, cost }`.
 - Adapters do **not** filter by hashtag — `RecapService` does that centrally.
 
 ### Concurrency
@@ -111,7 +137,7 @@ Every adapter's `fetchContent(kol, campaign)` returns `{ diagnostic, records[] }
 
 ## Data model (the `db/` pattern)
 
-Two flat JSON files are the single source of truth. `db/db.js` reads them fresh on
+Two flat JSON files are the single source of truth. `db/db.ts` reads them fresh on
 every call, so edits (direct or via bot commands) take effect without a restart.
 
 **`db/kols.json`** — one entry per KOL:
@@ -202,10 +228,11 @@ Tone Article, Commentar(s), View(s), Value, Name of Event, JML, ID, YEAR
 
 ## Setup
 
-**Requirements:** Node.js ≥ 18 (22 LTS recommended; the Docker image uses `node:22-alpine`).
+**Requirements:** Node.js ≥ 18 (22 LTS recommended; the Docker image uses
+`node:22-alpine`). TypeScript is a dev dependency — no global install needed.
 
 ```bash
-# 1. install dependencies
+# 1. install dependencies (includes the TypeScript toolchain)
 npm install
 
 # 2. create your env file and fill in the tokens
@@ -226,13 +253,30 @@ cp db/campaigns.example.json db/campaigns.json
 | `TELEGRAM_BOT_TOKEN` | for the bot | From BotFather. |
 | `TELEGRAM_ALLOWED_IDS` | for the bot | Comma-separated user ids allowed to use the bot. **Without it the bot refuses to start** (money guard). Find yours via `@userinfobot`. |
 | `YOUTUBE_API_KEY` | optional | Enables YouTube. If empty, YouTube is skipped. |
+| `DATA_DIR` | optional | Override the `db/` data folder (default: `<cwd>/db`). |
+| `OUT_DIR` | optional | Override the CSV output folder (default: `<cwd>/out`). |
 
 ### Run
 
+Development (run TypeScript directly via `tsx`, no build step):
+
 ```bash
-npm run recap   # CLI: one-shot recap of the active campaign -> CSV in out/
-npm run bot     # Telegram bot (long-polling)
+npm run recap     # CLI: one-shot recap of the active campaign -> CSV in out/
+npm run bot       # Telegram bot (long-polling)
+npm run typecheck # type-check without emitting
 ```
+
+Production (compile once, then run the plain JavaScript in `dist/`):
+
+```bash
+npm run build     # tsc -> dist/
+npm run bot:prod  # node dist/src/bot.js
+npm run recap:prod
+```
+
+> Data paths (`db/`, `out/`) resolve from the **working directory**, so both the dev
+> and built paths read/write the same folders regardless of where the compiled code
+> lives.
 
 ---
 
@@ -245,6 +289,10 @@ docker compose up -d --build   # build + start in the background
 docker compose logs -f         # watch logs
 docker compose down            # stop
 ```
+
+The image is **multi-stage**: the build stage runs `tsc` to produce `dist/`, and the
+runtime stage ships only production dependencies + the compiled JavaScript (no
+TypeScript, no dev dependencies). You do not run `npm run build` yourself for Docker.
 
 - Requires `.env` in the compose directory (secrets are passed via `env_file`, never
   baked into the image).
