@@ -111,7 +111,7 @@ const commandText = (ctx: Context): string => {
  */
 const fmtCampaign = (c: Campaign): string =>
   `<b>#${c.id} ${esc(c.name)}</b>\n` +
-  `tag <code>${esc(c.hashtag)}</code> · ${esc(c.status)} · since <code>${esc(String(c.started_at).slice(0, 10))}</code>`;
+  `tag <code>${esc(c.hashtag)}</code> · ${c.isActive ? 'active' : 'ended'} · since <code>${esc(String(c.started_at).slice(0, 10))}</code>`;
 
 /**
  * Format a KOL for display.
@@ -329,8 +329,8 @@ bot.command('addcampaign', (ctx) => {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return say(ctx, 'started_at must be YYYY-MM-DD.');
   const hashtag = tag.startsWith('#') ? tag : '#' + tag;
-  const c = new Campaign({ name, hashtag, status: 'ended', started_at: since, ended_at: null }).save();
-  return say(ctx, `✅ Added (status ended, <code>/activate ${c.id}</code> to enable):\n${fmtCampaign(c)}`);
+  const c = new Campaign({ name, hashtag, isActive: false, started_at: since, ended_at: null }).save();
+  return say(ctx, `✅ Added (inactive, <code>/activate ${c.id}</code> to enable):\n${fmtCampaign(c)}`);
 });
 
 // --- /activate <id> — set active, the rest become ended (keep the single-active invariant) ---

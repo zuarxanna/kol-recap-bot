@@ -195,7 +195,7 @@ Campaign.activate(2);                          // update: make #2 active, others
 - Handles are stored **bare** (no `@`, no URL). The YouTube adapter re-adds `@` when
   the API needs it. Leave a platform field as `""` to skip that platform for this KOL.
 
-**`db/campaigns.json`** — exactly one entry has `"status": "active"`:
+**`db/campaigns.json`** — exactly one entry has `"isActive": true`:
 
 ```json
 {
@@ -203,7 +203,7 @@ Campaign.activate(2);                          // update: make #2 active, others
   "created_at": "2026-06-20T09:00:00+07:00",
   "name": "Demo Campaign One",
   "hashtag": "#DemoOne",
-  "status": "active",
+  "isActive": true,
   "started_at": "2026-06-27",
   "ended_at": null
 }

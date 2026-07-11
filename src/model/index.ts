@@ -6,4 +6,4 @@ export type { ModelRow, ModelStatic } from './Model.js';
 export { Kol } from './kol/index.js';
 export type { KolRow } from './kol/index.js';
 export { Campaign } from './campaign/index.js';
-export type { CampaignRow, CampaignStatus } from './campaign/index.js';
+export type { CampaignRow } from './campaign/index.js';

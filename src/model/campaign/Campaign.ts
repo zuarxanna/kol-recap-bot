@@ -1,9 +1,6 @@
 import { Model } from '../Model.js';
 import type { ModelRow } from '../Model.js';
 
-/** A campaign's lifecycle status. Exactly one campaign is `'active'` at a time. */
-export type CampaignStatus = 'active' | 'ended';
-
 /**
  * The persisted shape of a campaign row.
  */
@@ -12,8 +9,8 @@ export interface CampaignRow extends ModelRow {
   name: string;
   /** Campaign hashtag, including the leading `"#"` (e.g. `"#DemoOne"`). */
   hashtag: string;
-  /** Lifecycle status. */
-  status: CampaignStatus;
+  /** Whether this is the live campaign. Exactly one row is `true` at a time. */
+  isActive: boolean;
   /** Scrape start boundary, `"YYYY-MM-DD"`. */
   started_at: string;
   /** End date, or `null` while active/open. */
@@ -24,7 +21,7 @@ export interface CampaignRow extends ModelRow {
  * A campaign master record, backed by `db/campaigns.json`.
  *
  * @remarks
- * Exactly one campaign is `'active'` at a time; {@link Campaign.activate} enforces that
+ * Exactly one campaign is active at a time; {@link Campaign.activate} enforces that
  * invariant.
  */
 export class Campaign extends Model implements CampaignRow {
@@ -33,19 +30,19 @@ export class Campaign extends Model implements CampaignRow {
 
   name: string;
   hashtag: string;
-  status: CampaignStatus;
+  isActive: boolean;
   started_at: string;
   ended_at: string | null;
 
   /**
-   * @param row - Partial campaign row; missing fields default (`status` → `'ended'`,
+   * @param row - Partial campaign row; missing fields default (`isActive` → `false`,
    * `ended_at` → `null`, strings → `''`, plus the base `id`/`created_at` defaults).
    */
   constructor(row: Partial<CampaignRow> = {}) {
     super(row);
     this.name = row.name ?? '';
     this.hashtag = row.hashtag ?? '';
-    this.status = row.status ?? 'ended';
+    this.isActive = row.isActive ?? false;
     this.started_at = row.started_at ?? '';
     this.ended_at = row.ended_at ?? null;
   }
@@ -70,7 +67,7 @@ export class Campaign extends Model implements CampaignRow {
       created_at: this.created_at,
       name: this.name,
       hashtag: this.hashtag,
-      status: this.status,
+      isActive: this.isActive,
       started_at: this.started_at,
       ended_at: this.ended_at,
     };
@@ -81,11 +78,11 @@ export class Campaign extends Model implements CampaignRow {
    * @returns The active campaign, or `null` if none is active.
    */
   static active(): Campaign | null {
-    return Campaign.all().find((c) => c.status === 'active') ?? null;
+    return Campaign.all().find((c) => c.isActive) ?? null;
   }
 
   /**
-   * Make one campaign active and every other one ended, preserving the single-active
+   * Make one campaign active and every other one inactive, preserving the single-active
    * invariant.
    * @param id - The campaign to activate.
    * @returns The activated campaign, or `null` if the id does not exist.
@@ -93,7 +90,7 @@ export class Campaign extends Model implements CampaignRow {
   static activate(id: number): Campaign | null {
     const all = Campaign.all();
     if (!all.some((c) => c.id === id)) return null;
-    for (const c of all) c.status = c.id === id ? 'active' : 'ended';
+    for (const c of all) c.isActive = c.id === id;
     Campaign.saveAll(all);
     return all.find((c) => c.id === id) ?? null;
   }
