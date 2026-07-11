@@ -1,13 +1,3 @@
-// RecapService — the orchestrator. It knows no concrete platform (DIP): it only knows
-// the PlatformAdapter contract. Adding TikTok/YouTube = inject a new adapter; this file
-// does NOT change (OCP).
-//
-// Flow: active campaign -> KOLs processed SEQUENTIALLY (one at a time, so Apify
-// concurrency is capped at the number of adapters, not KOLs x adapters) -> but the
-// adapters WITHIN one KOL run in PARALLEL ("concurrent per handle") -> CENTRAL hashtag
-// filter -> onKolDone callback per finished KOL (progress) -> flatten + sort by name
-// -> CsvWriter -> result.
-
 import { Campaign, Kol } from './model/index.js';
 import type { CsvWriter } from './CsvWriter.js';
 import type { PlatformAdapter } from './adapters/index.js';
@@ -20,23 +10,43 @@ import type {
   RunOptions,
 } from './types.js';
 
-/** Injected dependencies for a RecapService. */
+/** Injected dependencies for a {@link RecapService}. */
 interface RecapServiceDeps {
+  /** The platform adapters to run (the concrete strategies). */
   adapters: PlatformAdapter[];
+  /** The writer that emits the recap CSV. */
   csvWriter: CsvWriter;
 }
 
 /** Result of running one adapter for one KOL, after the central filter/placeholder. */
 interface AdapterRunResult {
+  /** The fetch diagnostic, augmented with the post-filter match count. */
   diagnostic: DiagnosticWithMatched;
+  /** The records that survived the hashtag filter (or a single placeholder row). */
   records: ContentRecord[];
 }
 
-/** Orchestrates a recap run across all registered platform adapters. */
+/**
+ * Orchestrates a recap run across all registered platform adapters.
+ *
+ * @remarks
+ * Dependency-inverted: it knows no concrete platform, only the {@link PlatformAdapter}
+ * contract, so adding a platform means injecting an adapter — this class does NOT change
+ * (OCP).
+ *
+ * Flow: active campaign → KOLs processed SEQUENTIALLY (so Apify concurrency is capped at
+ * the number of adapters, not KOLs × adapters), but the adapters WITHIN one KOL run in
+ * PARALLEL → CENTRAL hashtag filter → `onKolDone` per finished KOL → flatten + sort by
+ * name → CSV → result.
+ */
 export class RecapService {
   private readonly adapters: PlatformAdapter[];
   private readonly csvWriter: CsvWriter;
 
+  /**
+   * @param deps - Injected adapters + CSV writer.
+   * @throws If no adapters are given, or the writer is missing.
+   */
   constructor({ adapters, csvWriter }: RecapServiceDeps) {
     if (!adapters?.length) throw new Error('RecapService requires at least 1 adapter');
     if (!csvWriter) throw new Error('RecapService requires a csvWriter');
@@ -44,7 +54,12 @@ export class RecapService {
     this.csvWriter = csvWriter;
   }
 
-  /** Run the recap for the active campaign. */
+  /**
+   * Run the recap for the active campaign.
+   * @param options - Run options (e.g. the `onKolDone` progress callback).
+   * @returns The full recap result (records, rows, diagnostics, cost, output path).
+   * @throws If there is no active campaign, it has no hashtag, or no KOL matches any adapter.
+   */
   async run({ onKolDone }: RunOptions = {}): Promise<RecapResult> {
     const campaign = Campaign.active();
     if (!campaign) throw new Error('No campaign with status=active in db/campaigns.json');
@@ -83,7 +98,13 @@ export class RecapService {
     return { campaign, hashtag, since, records: matchedRecords, rows, diagnostics, totalCost, outPath };
   }
 
-  /** Process one KOL: every adapter that canHandle it runs in PARALLEL. */
+  /**
+   * Process one KOL: every adapter that `canHandle` it runs in PARALLEL.
+   * @param kol - The KOL to process.
+   * @param campaign - The active campaign.
+   * @param hashtag - The lowercased campaign hashtag (no `"#"`).
+   * @returns The KOL's combined records + diagnostics.
+   */
   async #processKol(kol: Kol, campaign: Campaign, hashtag: string): Promise<KolResult> {
     const adapters = this.adapters.filter((a) => a.canHandle(kol)); // no handle -> skip (no row)
     const perAdapter = await Promise.all(
@@ -97,8 +118,13 @@ export class RecapService {
   }
 
   /**
-   * Run one adapter for one KOL: fetch (wrapped in try/catch so one adapter's error does
-   * not kill the run), then apply the CENTRAL hashtag filter / placeholder.
+   * Run one adapter for one KOL: fetch (wrapped so one adapter's error cannot kill the
+   * run), then apply the CENTRAL hashtag filter, or emit a placeholder row on failure.
+   * @param adapter - The adapter to run.
+   * @param kol - The KOL to fetch.
+   * @param campaign - The active campaign.
+   * @param hashtag - The lowercased campaign hashtag (no `"#"`).
+   * @returns The diagnostic (with match count) and the surviving records.
    */
   async #runAdapter(
     adapter: PlatformAdapter,
@@ -144,11 +170,18 @@ export class RecapService {
   }
 
   /**
-   * Build a placeholder row for a KOL whose fetch failed: identity filled, data fields
-   * use "-" (a VISIBLE "failed / fill manually" marker, not blank/0). date stays "" so
-   * CsvWriter blanks Release Date/Month/YEAR (it cannot parse "-"). hashtags [] so it
-   * would not pass the filter (it is pushed directly). JML stays 1 (hardcoded in
-   * CsvWriter, a deliberate decision).
+   * Build a placeholder row for a KOL whose fetch failed.
+   *
+   * @remarks
+   * Identity is filled; data fields use `"-"` (a VISIBLE "failed / fill manually"
+   * marker, not blank/0). `date` stays `""` so CsvWriter blanks Release Date/Month/YEAR
+   * (it cannot parse `"-"`). `hashtags` is `[]` so it would not pass the filter (it is
+   * pushed directly).
+   *
+   * @param kol - The KOL that failed.
+   * @param adapter - The adapter that failed.
+   * @param diagnostic - The failure diagnostic (for the handle).
+   * @returns A single placeholder record.
    */
   #placeholder(kol: Kol, adapter: PlatformAdapter, diagnostic: FetchDiagnostic): ContentRecord {
     return {

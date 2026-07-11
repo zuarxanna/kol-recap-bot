@@ -1,13 +1,3 @@
-// TikTokAdapter — TikTok via the Apify actor clockworks/tiktok-scraper.
-//
-// Same shape as InstagramAdapter: scrape by username + date, RETURN pre-filter records.
-// Hashtag filtering is NOT done here — RecapService does it centrally.
-//
-// Fields verified against real raw output (NOT guessed):
-//   views = playCount, likes = diggCount, comments = commentCount,
-//   timestamp = createTimeISO (ISO UTC "...Z") -> WIB, url = webVideoUrl,
-//   caption = text, hashtags = hashtags[].name (already an array, no regex needed).
-
 import { ApifyClient } from 'apify-client';
 import { PlatformAdapter } from './PlatformAdapter.js';
 import type { Campaign, ContentRecord, FetchResult, Kol } from '../types.js';
@@ -16,39 +6,73 @@ const ACTOR = 'clockworks/tiktok-scraper';
 
 /** One raw item as returned by the Apify actor (only the fields we read). */
 interface TikTokItem {
+  /** Present when the item failed (private/missing); such items are dropped. */
   error?: string;
+  /** Caption text. */
   text?: string;
   webVideoUrl?: string;
+  /** Real view count. */
   playCount?: number;
+  /** Like count. */
   diggCount?: number;
   commentCount?: number;
+  /** ISO UTC timestamp (`...Z`). */
   createTimeISO?: string;
+  /** Already-parsed hashtag objects. */
   hashtags?: Array<{ name?: string }>;
 }
 
-/** TikTok adapter backed by an Apify actor. */
+/**
+ * TikTok adapter backed by the Apify actor `clockworks/tiktok-scraper`.
+ *
+ * @remarks
+ * Same shape as {@link InstagramAdapter}: scrape by username + date, return pre-filter
+ * records. Hashtag filtering is NOT done here — `RecapService` does it centrally.
+ *
+ * Fields were verified against real raw output (NOT guessed): views = `playCount`,
+ * likes = `diggCount`, comments = `commentCount`, timestamp = `createTimeISO`,
+ * url = `webVideoUrl`, caption = `text`, hashtags = `hashtags[].name`.
+ */
 export class TikTokAdapter extends PlatformAdapter {
   private readonly client: ApifyClient;
 
+  /**
+   * @param token - Apify API token.
+   * @throws If `token` is missing.
+   */
   constructor(token: string) {
     super();
     if (!token) throw new Error('TikTokAdapter requires APIFY_TOKEN');
     this.client = new ApifyClient({ token });
   }
 
+  /** @returns The platform label `"TikTok"`. */
   get platform(): string {
     return 'TikTok';
   }
 
+  /**
+   * @param kol - The KOL to check.
+   * @returns `true` when the KOL has a TikTok username.
+   */
   canHandle(kol: Kol): boolean {
     return Boolean(kol.tiktok_username && kol.tiktok_username.trim());
   }
 
+  /**
+   * @param kol - The KOL.
+   * @returns The cleaned TikTok handle.
+   */
   handleFor(kol: Kol): string {
     return String(kol.tiktok_username || '').trim();
   }
 
-  /** Scrape a KOL's videos published since the campaign start. */
+  /**
+   * Scrape a KOL's videos published since the campaign start.
+   * @param kol - The KOL to scrape.
+   * @param campaign - The active campaign (provides `started_at`).
+   * @returns A diagnostic plus normalized records, PRE hashtag-filter.
+   */
   async fetchContent(kol: Kol, campaign: Campaign): Promise<FetchResult> {
     const handle = kol.tiktok_username.trim();
     // WIDEN by 1 day: Apify filters in UTC, our date is WIB (+7). An early-morning WIB
@@ -101,7 +125,13 @@ export class TikTokAdapter extends PlatformAdapter {
     };
   }
 
-  /** Map one raw Apify item to a normalized ContentRecord. */
+  /**
+   * Map one raw Apify item to a normalized {@link ContentRecord}.
+   * @param it - The raw Apify item.
+   * @param kol - The KOL it belongs to.
+   * @param handle - The TikTok handle.
+   * @returns The normalized record.
+   */
   #normalize(it: TikTokItem, kol: Kol, handle: string): ContentRecord {
     return {
       name: kol.name,
@@ -121,13 +151,21 @@ export class TikTokAdapter extends PlatformAdapter {
     };
   }
 
-  /** Derive a title from a caption: first line, truncated so CSV cells stay small. */
+  /**
+   * Derive a title from a caption: first line, truncated so CSV cells stay small.
+   * @param text - The raw caption.
+   * @returns The title (≤120 chars).
+   */
   #toTitle(text: string | undefined): string {
     const first = String(text || '').split('\n')[0]!.trim();
     return first.length > 120 ? first.slice(0, 117) + '...' : first;
   }
 
-  /** Convert a UTC timestamp to a WIB (Asia/Jakarta) date string. */
+  /**
+   * Convert a UTC timestamp to a WIB (Asia/Jakarta) date string.
+   * @param ts - The UTC timestamp.
+   * @returns `"YYYY-MM-DD"`, or `""` if unparseable.
+   */
   #toWibDate(ts: string | undefined): string {
     const d = new Date(ts ?? '');
     return Number.isNaN(d.getTime())
@@ -136,8 +174,10 @@ export class TikTokAdapter extends PlatformAdapter {
   }
 
   /**
-   * Subtract one day from a "YYYY-MM-DD" string. Forces UTC ("Z") to avoid any
+   * Subtract one day from a `"YYYY-MM-DD"` string. Forces UTC (`"Z"`) to avoid any
    * local-timezone shift.
+   * @param iso - Date as `"YYYY-MM-DD"`.
+   * @returns The date minus one day, or the input if unparseable.
    */
   static #minusOneDay(iso: string): string {
     const d = new Date(`${iso}T00:00:00Z`);

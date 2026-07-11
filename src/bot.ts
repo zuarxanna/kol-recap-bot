@@ -1,14 +1,3 @@
-// bot.ts — Telegram trigger + deliver + manage db (long-polling, no webhook).
-//
-// MONEY GUARD: the bot triggers paid Apify scrapes. HARD ALLOWLIST via
-// TELEGRAM_ALLOWED_IDS (.env, comma-separated user ids). An unknown id is ignored.
-// Without an allowlist the bot refuses to start (fail-closed) — so no open bot can
-// drain the balance.
-//
-// Run:  tsx src/bot.ts   (dev)   |   node dist/src/bot.js   (built)
-// Requires in .env: TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_IDS, APIFY_TOKEN
-// (YOUTUBE_API_KEY optional).
-
 import 'dotenv/config';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { runRecap } from './recap.js';
@@ -21,7 +10,15 @@ if (!TELEGRAM_BOT_TOKEN) {
   console.error('FATAL: TELEGRAM_BOT_TOKEN is missing from .env');
   process.exit(1);
 }
-// fail-closed: without an allowlist, do NOT start (an open bot = anyone drains Apify)
+
+/**
+ * Allowlisted Telegram user ids (the money guard).
+ *
+ * @remarks
+ * The bot triggers paid Apify scrapes, so access is fail-closed: parsed from
+ * `TELEGRAM_ALLOWED_IDS` (comma-separated), and if empty the bot refuses to start so no
+ * open bot can drain the balance. Unknown ids are ignored by the allowlist middleware.
+ */
 const ALLOWED: number[] = String(TELEGRAM_ALLOWED_IDS || '')
   .split(',')
   .map((s) => s.trim())
@@ -32,60 +29,106 @@ if (ALLOWED.length === 0) {
   process.exit(1);
 }
 
-// handlerTimeout Infinity: /recap is intentionally long (multi-KOL Apify scrape).
-// Telegraf's default 90s -> p-timeout rejection -> process CRASH. We manage the duration
-// ourselves (the run-lock prevents pile-up).
+/**
+ * The Telegraf bot instance.
+ *
+ * @remarks
+ * `handlerTimeout: Infinity` because `/recap` is intentionally long (multi-KOL Apify
+ * scrape); Telegraf's default 90s would fire a `p-timeout` rejection outside the
+ * handler's try/catch and crash the process. Duration is managed here instead (the
+ * run-lock prevents pile-up).
+ */
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN, { handlerTimeout: Infinity });
 
-// --- lock: prevent two /recap runs at once (Apify double-spend) ---
+/** Lock preventing two `/recap` runs at once (avoids an Apify double-spend). */
 let recapRunning = false;
 
-// --- HTML formatting helpers (parse_mode HTML chosen over MarkdownV2: only 3 escapes) ---
-
+/** Shared reply options: HTML parse mode (chosen over MarkdownV2 — only 3 escapes). */
 const HTML = { parse_mode: 'HTML', disable_web_page_preview: true } as const;
 
 /**
- * Escape a dynamic value for HTML. MUST wrap EVERY dynamic value (name/title/error)
- * because < & > can come from a caption or error message.
+ * Escape a dynamic value for HTML.
+ *
+ * @remarks
+ * MUST wrap EVERY dynamic value (name/title/error) because `<`, `&`, `>` can come from a
+ * caption or error message.
+ *
+ * @param s - The value to escape.
+ * @returns The HTML-safe string.
  */
 const esc = (s: unknown): string =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Format a number for chat display (en-US grouping, e.g. 649,644). CSV stays raw. */
+/**
+ * Format a number for chat display (en-US grouping, e.g. `649,644`). CSV stays raw.
+ * @param n - The value to format.
+ * @returns The grouped string, or `"-"` for empty/nullish.
+ */
 const num = (n: number | string): string =>
   typeof n === 'number' ? n.toLocaleString('en-US') : n === '' || n == null ? '-' : String(n);
 
-/** Reply with the shared HTML options merged in. */
+/**
+ * Reply with the shared HTML options merged in.
+ * @param ctx - The Telegraf context.
+ * @param text - The message text (HTML).
+ * @param extra - Extra reply options to merge.
+ * @returns The Telegram API result.
+ */
 const say = (ctx: Context, text: string, extra?: object): Promise<unknown> =>
   ctx.reply(text, { ...HTML, ...extra });
 
-/** Edit the current message text with HTML options. */
+/**
+ * Edit the current message text with HTML options.
+ * @param ctx - The Telegraf context.
+ * @param text - The new message text (HTML).
+ * @returns The Telegram API result.
+ */
 const editHtml = (ctx: Context, text: string): Promise<unknown> =>
   ctx.editMessageText(text, HTML) as Promise<unknown>;
 
-/** Shorten a URL for display (strip scheme/www and trailing slashes). */
+/**
+ * Shorten a URL for display (strip scheme/www and trailing slashes).
+ * @param u - The URL.
+ * @returns The shortened display string.
+ */
 const shortUrl = (u: string): string =>
   String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
 
-/** Extract the raw text of the incoming message (empty string if none). */
+/**
+ * Extract the raw text of the incoming message.
+ * @param ctx - The Telegraf context.
+ * @returns The message text, or `""` if there is none.
+ */
 const commandText = (ctx: Context): string => {
   const msg = ctx.message;
   return msg && 'text' in msg ? msg.text : '';
 };
 
-/** Format a campaign for display. */
+/**
+ * Format a campaign for display.
+ * @param c - The campaign.
+ * @returns An HTML snippet.
+ */
 const fmtCampaign = (c: Campaign): string =>
   `<b>#${c.id} ${esc(c.name)}</b>\n` +
   `tag <code>${esc(c.hashtag)}</code> · ${esc(c.status)} · since <code>${esc(String(c.started_at).slice(0, 10))}</code>`;
 
-/** Format a KOL for display. */
+/**
+ * Format a KOL for display.
+ * @param k - The KOL.
+ * @returns An HTML snippet.
+ */
 const fmtKol = (k: Kol): string =>
   `<b>#${k.id} ${esc(k.name)}</b>\n` +
   `ig ${k.ig_username ? '<code>@' + esc(k.ig_username) + '</code>' : '-'}` +
   ` · tt ${k.tiktok_username ? '<code>@' + esc(k.tiktok_username) + '</code>' : '-'}` +
   ` · yt ${k.youtube_channel ? '<code>' + esc(k.youtube_channel) + '</code>' : '-'}`;
 
-/** Format one content card: name | platform | handle / metrics / tappable link. */
+/**
+ * Format one content card: name | platform | handle / metrics / tappable link.
+ * @param r - The content record.
+ * @returns An HTML snippet.
+ */
 const card = (r: ContentRecord): string =>
   `<b>${esc(r.name)}</b> | ${esc(r.platform)} | <code>@${esc(r.handle)}</code>\n` +
   `👁 ${num(r.views)}  ❤ ${num(r.likes)}  💬 ${num(r.comments)}\n` +
@@ -94,6 +137,8 @@ const card = (r: ContentRecord): string =>
 /**
  * Send content cards in chunks under ~3500 chars (Telegram's limit is 4096) so a large
  * batch does not fail.
+ * @param ctx - The Telegraf context.
+ * @param records - The records to render as cards.
  */
 async function sendCards(ctx: Context, records: ContentRecord[]): Promise<void> {
   const sep = '\n──────────────\n';
@@ -110,12 +155,17 @@ async function sendCards(ctx: Context, records: ContentRecord[]): Promise<void> 
   if (buf) await say(ctx, buf);
 }
 
-// --- error contact + safety-net reply ---
+/** IT contact name shown in error messages. */
 const IT_CONTACT = 'Ikhsun Tampan';
-const IT_CONTACT_URL = 'https://t.me/zuarxanna'; // CHANGE if the IT handle differs
+/** Deep link to the IT contact (CHANGE if the IT handle differs). */
+const IT_CONTACT_URL = 'https://t.me/zuarxanna';
+/** The user-facing internal-error message. */
 const ERR_MSG = `⚠️ Internal error. Contact IT: <b>${IT_CONTACT}</b>.`;
 
-/** Extra options for an error message: HTML + a tap-to-contact button. */
+/**
+ * Build the extra options for an error message: HTML + a tap-to-contact button.
+ * @returns Telegraf reply extra options.
+ */
 const errExtra = (): object => ({
   ...HTML,
   ...Markup.inlineKeyboard([Markup.button.url(`Contact ${IT_CONTACT}`, IT_CONTACT_URL)]),
@@ -132,7 +182,7 @@ bot.catch((err: unknown, ctx: Context) => {
   }
 });
 
-// --- allowlist middleware: an unknown id is ignored (reply once, then stop) ---
+// Allowlist middleware: an unknown id is ignored (reply once, then stop).
 bot.use(async (ctx, next) => {
   const uid = ctx.from?.id;
   if (uid == null || !ALLOWED.includes(uid)) {
@@ -143,7 +193,7 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// --- /start, /help --- (<id> is escaped to &lt;id&gt; so it is not read as an HTML tag)
+/** The `/start` and `/help` text (`<id>` escaped so it is not read as an HTML tag). */
 const HELP = [
   '<b>KOL Metrics Recap bot</b>',
   '',
@@ -292,14 +342,17 @@ bot.command('activate', (ctx) => {
   return say(ctx, `✅ Active now:\n${fmtCampaign(active)}`);
 });
 
-// --- launch (long-polling) ---
-// getMe() first: validate the token + connectivity before polling (launch() itself
-// resolves on STOP, not start, so it cannot be used to know polling has begun).
+// Launch (long-polling). getMe() first: validate the token + connectivity before
+// polling (launch() itself resolves on STOP, not start).
 const me = await bot.telegram.getMe();
 void bot.launch();
 console.log(`bot @${me.username} running. allowlist: ${ALLOWED.join(', ')}`);
 
-/** Notify every allowlisted user (best-effort; send failures are ignored). */
+/**
+ * Notify every allowlisted user (best-effort; send failures are ignored).
+ * @param text - The message text (HTML).
+ * @param extra - Extra reply options (defaults to {@link HTML}).
+ */
 async function notifyAll(text: string, extra?: object): Promise<void> {
   for (const id of ALLOWED) {
     try {
@@ -325,7 +378,10 @@ process.on('uncaughtException', (err) => {
   void notifyAll(ERR_MSG, errExtra());
 });
 
-// stop can throw if shutdown races startup — guard it.
+/**
+ * Stop the bot on a shutdown signal, guarding against a startup/shutdown race.
+ * @param sig - The received signal.
+ */
 const stop = (sig: 'SIGINT' | 'SIGTERM'): void => {
   try {
     bot.stop(sig);
