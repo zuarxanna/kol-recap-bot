@@ -12,10 +12,8 @@
 import 'dotenv/config';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { runRecap } from './recap.js';
-import {
-  loadCampaigns, saveCampaigns, loadKols, saveKols, activeCampaign, nextId,
-} from '../db/db.js';
-import type { Campaign, ContentRecord, Kol, KolResult } from './types.js';
+import { Campaign, Kol } from '../db/index.js';
+import type { ContentRecord, KolResult } from './types.js';
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_IDS } = process.env;
 
@@ -168,29 +166,29 @@ bot.help((ctx) => say(ctx, HELP));
 
 // --- /status ---
 bot.command('status', (ctx) => {
-  const c = activeCampaign();
-  const igCount = loadKols().filter((k) => k.ig_username?.trim()).length;
+  const c = Campaign.active();
+  const igCount = Kol.all().filter((k) => k.ig_username?.trim()).length;
   if (!c) return say(ctx, `No active campaign.\n<b>KOLs with IG:</b> ${igCount}`);
   return say(ctx, `<b>Active campaign</b>\n${fmtCampaign(c)}\n\n<b>KOLs with IG:</b> ${igCount}`);
 });
 
 // --- /campaigns ---
 bot.command('campaigns', (ctx) => {
-  const list = loadCampaigns();
+  const list = Campaign.all();
   if (!list.length) return say(ctx, 'No campaigns yet.');
   return say(ctx, list.map(fmtCampaign).join('\n\n'));
 });
 
 // --- /kols ---
 bot.command('kols', (ctx) => {
-  const list = loadKols();
+  const list = Kol.all();
   if (!list.length) return say(ctx, 'No KOLs yet.');
   return say(ctx, list.map(fmtKol).join('\n\n'));
 });
 
 // --- /recap ---
 bot.command('recap', async (ctx) => {
-  const c = activeCampaign();
+  const c = Campaign.active();
   if (!c) return say(ctx, 'No active campaign. Run /activate first.');
   if (recapRunning) return say(ctx, 'A recap is already running. Wait for it to finish.');
 
@@ -232,20 +230,10 @@ bot.command('addkol', (ctx) => {
   const arg = commandText(ctx).replace(/^\/addkol(@\S+)?\s*/, '');
   const [name, ig] = arg.split('|').map((s) => s.trim());
   if (!name || !ig) return say(ctx, 'Format: <code>/addkol Full Name | ig_username</code>');
-  const kols = loadKols();
-  if (kols.some((k) => k.ig_username?.toLowerCase() === ig.toLowerCase())) {
+  if (Kol.findByIg(ig)) {
     return say(ctx, `A KOL with ig <code>@${esc(ig)}</code> already exists.`);
   }
-  const kol: Kol = {
-    id: nextId(kols),
-    name,
-    ig_username: ig,
-    tiktok_username: '',
-    youtube_channel: '',
-    created_at: new Date().toISOString(),
-  };
-  kols.push(kol);
-  saveKols(kols);
+  const kol = new Kol({ name, ig_username: ig }).save();
   return say(ctx, `✅ Added:\n${fmtKol(kol)}`);
 });
 
@@ -253,7 +241,7 @@ bot.command('addkol', (ctx) => {
 bot.command('delkol', (ctx) => {
   const id = Number(commandText(ctx).replace(/^\/delkol(@\S+)?\s*/, '').trim());
   if (!id) return say(ctx, 'Format: <code>/delkol &lt;id&gt;</code>');
-  const kol = loadKols().find((k) => k.id === id);
+  const kol = Kol.find(id);
   if (!kol) return say(ctx, `KOL #${id} does not exist.`);
   return say(
     ctx,
@@ -267,13 +255,12 @@ bot.command('delkol', (ctx) => {
 
 bot.action(/^delkol:(\d+)$/, (ctx) => {
   const id = Number(ctx.match[1]);
-  const kols = loadKols();
-  const kol = kols.find((k) => k.id === id);
+  const kol = Kol.find(id);
   if (!kol) {
     void ctx.answerCbQuery();
     return editHtml(ctx, `KOL #${id} no longer exists.`);
   }
-  saveKols(kols.filter((k) => k.id !== id));
+  kol.delete();
   void ctx.answerCbQuery('Deleted');
   return editHtml(ctx, `🗑 Deleted: #${id} <b>${esc(kol.name)}</b>`);
 });
@@ -292,17 +279,7 @@ bot.command('addcampaign', (ctx) => {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) return say(ctx, 'started_at must be YYYY-MM-DD.');
   const hashtag = tag.startsWith('#') ? tag : '#' + tag;
-  const campaigns = loadCampaigns();
-  const c: Campaign = {
-    id: nextId(campaigns),
-    name,
-    hashtag,
-    status: 'ended',
-    started_at: since,
-    ended_at: null,
-  };
-  campaigns.push(c);
-  saveCampaigns(campaigns);
+  const c = new Campaign({ name, hashtag, status: 'ended', started_at: since, ended_at: null }).save();
   return say(ctx, `✅ Added (status ended, <code>/activate ${c.id}</code> to enable):\n${fmtCampaign(c)}`);
 });
 
@@ -310,11 +287,8 @@ bot.command('addcampaign', (ctx) => {
 bot.command('activate', (ctx) => {
   const id = Number(commandText(ctx).replace(/^\/activate(@\S+)?\s*/, '').trim());
   if (!id) return say(ctx, 'Format: <code>/activate &lt;id&gt;</code>');
-  const campaigns = loadCampaigns();
-  if (!campaigns.some((c) => c.id === id)) return say(ctx, `Campaign #${id} does not exist.`);
-  for (const c of campaigns) c.status = c.id === id ? 'active' : 'ended';
-  saveCampaigns(campaigns);
-  const active = campaigns.find((c) => c.id === id)!;
+  const active = Campaign.activate(id);
+  if (!active) return say(ctx, `Campaign #${id} does not exist.`);
   return say(ctx, `✅ Active now:\n${fmtCampaign(active)}`);
 });
 

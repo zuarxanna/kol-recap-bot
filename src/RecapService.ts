@@ -8,15 +8,13 @@
 // filter -> onKolDone callback per finished KOL (progress) -> flatten + sort by name
 // -> CsvWriter -> result.
 
-import { activeCampaign, loadKols } from '../db/db.js';
+import { Campaign, Kol } from '../db/index.js';
 import type { CsvWriter } from './CsvWriter.js';
 import type { PlatformAdapter } from './adapters/PlatformAdapter.js';
 import type {
-  Campaign,
   ContentRecord,
   DiagnosticWithMatched,
   FetchDiagnostic,
-  Kol,
   KolResult,
   RecapResult,
   RunOptions,
@@ -48,14 +46,14 @@ export class RecapService {
 
   /** Run the recap for the active campaign. */
   async run({ onKolDone }: RunOptions = {}): Promise<RecapResult> {
-    const campaign = activeCampaign();
+    const campaign = Campaign.active();
     if (!campaign) throw new Error('No campaign with status=active in db/campaigns.json');
 
     const hashtag = String(campaign.hashtag || '').replace(/^#/, '').toLowerCase();
     if (!hashtag) throw new Error(`Active campaign "${campaign.name}" has no hashtag`);
     const since = String(campaign.started_at || '').slice(0, 10);
 
-    const kols = loadKols();
+    const kols = Kol.all();
     const anyHandled = kols.some((k) => this.adapters.some((a) => a.canHandle(k)));
     if (!anyHandled) throw new Error('No KOL matches any adapter');
 

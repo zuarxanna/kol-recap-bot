@@ -80,12 +80,16 @@ contract, so adding a platform never touches the core.
 ```
 tsconfig.json          TypeScript config (NodeNext, strict) -> outputs to dist/
 db/
-  db.ts                load/save JSON (loadCampaigns/saveCampaigns/loadKols/saveKols/activeCampaign/nextId)
+  index.ts             barrel: re-exports the models (import { Kol, Campaign } from '../db/index.js')
+  model/
+    Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
+    Kol.ts             extends Model; db/kols.json (+ findByIg)
+    Campaign.ts        extends Model; db/campaigns.json (+ active/activate, single-active invariant)
   campaigns.json       real data (gitignored; copy from campaigns.example.json)
   kols.json            real data (gitignored; copy from kols.example.json)
   *.example.json       committed templates showing the data shape
 src/
-  types.ts             shared domain types (Kol, Campaign, ContentRecord, FetchDiagnostic, ...)
+  types.ts             shared types (ContentRecord, FetchDiagnostic, ...); re-exports Kol/Campaign from db/model
   recap.ts             ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
   bot.ts               ENTRY: Telegram bot (telegraf, long-polling)
   RecapService.ts      orchestrator; owns the central hashtag filter + sort (DIP)
@@ -137,8 +141,21 @@ The shapes are defined in `src/types.ts`:
 
 ## Data model (the `db/` pattern)
 
-Two flat JSON files are the single source of truth. `db/db.ts` reads them fresh on
-every call, so edits (direct or via bot commands) take effect without a restart.
+Two flat JSON files are the single source of truth. Each entity is a **class-based
+model** (`db/model/`) extending an abstract `Model` that provides file-backed CRUD —
+`Kol.all()`, `Kol.find(id)`, `new Kol({...}).save()`, `kol.delete()`,
+`Campaign.active()`, `Campaign.activate(id)`. Every model row carries an `id` and a
+`created_at`. Reads always hit disk fresh, so edits (direct or via bot commands) take
+effect without a restart.
+
+```ts
+import { Kol, Campaign } from './db/index.js';
+
+const kols = Kol.all();                       // read all
+const kol  = new Kol({ name, ig_username }).save();  // create (auto id + created_at)
+Kol.find(kol.id)?.delete();                   // delete
+Campaign.activate(2);                          // update: make #2 active, others ended
+```
 
 **`db/kols.json`** — one entry per KOL:
 
@@ -161,6 +178,7 @@ every call, so edits (direct or via bot commands) take effect without a restart.
 ```json
 {
   "id": 1,
+  "created_at": "2026-06-20T09:00:00+07:00",
   "name": "Demo Campaign One",
   "hashtag": "#DemoOne",
   "status": "active",

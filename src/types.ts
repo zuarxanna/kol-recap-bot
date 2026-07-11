@@ -1,33 +1,15 @@
 // types.ts — shared domain types for the whole project.
 //
-// These describe the data model (Kol, Campaign), the normalized content the adapters
-// produce (ContentRecord), and the diagnostics/results that flow through RecapService.
+// The data-model entities (Kol, Campaign) are class-based models that own their own
+// persistence — they live in db/model/. They are re-exported here so the rest of the
+// app can keep importing domain types from a single place. This file also defines the
+// normalized content the adapters produce (ContentRecord) and the diagnostics/results
+// that flow through RecapService.
 
-/** A KOL (influencer) master record, stored in db/kols.json. */
-export interface Kol {
-  id: number;
-  name: string;
-  /** Instagram handle, bare (no "@"). Empty string = not on Instagram. */
-  ig_username: string;
-  /** TikTok handle, bare (no "@"). Empty string = not on TikTok. */
-  tiktok_username: string;
-  /** YouTube handle, bare (no "@"). Empty string = not on YouTube. */
-  youtube_channel: string;
-  /** ISO timestamp of when the KOL was added. */
-  created_at: string;
-}
+import type { Kol } from '../db/model/Kol.js';
+import type { Campaign } from '../db/model/Campaign.js';
 
-/** A campaign master record, stored in db/campaigns.json. Exactly one is "active". */
-export interface Campaign {
-  id: number;
-  name: string;
-  /** Campaign hashtag, including the leading "#" (e.g. "#DemoOne"). */
-  hashtag: string;
-  status: 'active' | 'ended';
-  /** Scrape start boundary, "YYYY-MM-DD". */
-  started_at: string;
-  ended_at: string | null;
-}
+export type { Kol, Campaign };
 
 /** A metric value: a real count, or "" when the platform does not expose it. */
 export type Metric = number | string;
