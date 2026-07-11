@@ -37,21 +37,21 @@ export class CsvWriter {
 
   /**
    * RFC-4180 cell escaping.
-   * @param v - The raw cell value.
+   * @param value - The raw cell value.
    * @returns The value, quoted if it contains a comma/quote/newline (inner quotes doubled).
    */
-  #formatCell(v: string | number | null | undefined): string {
-    const s = v == null ? '' : String(v);
-    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  #formatCell(value: string | number | null | undefined): string {
+    const str = value == null ? '' : String(value);
+    return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
   }
 
   /**
    * Join a row's values into one escaped CSV line.
-   * @param arr - The row cells.
+   * @param cells - The row cells.
    * @returns The comma-joined, escaped line.
    */
-  #formatRow(arr: CsvRow): string {
-    return arr.map((v) => this.#formatCell(v)).join(',');
+  #formatRow(cells: CsvRow): string {
+    return cells.map((value) => this.#formatCell(value)).join(',');
   }
 
   /**
@@ -73,10 +73,10 @@ export class CsvWriter {
    * @returns `{ date: "DD/MM/YYYY", month: "Jun", year: "2026" }`, or empty strings if unparseable.
    */
   #deriveDateParts(iso: string): { date: string; month: string; year: string } {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
-    if (!m) return { date: '', month: '', year: '' };
-    const [, y, mo, d] = m;
-    return { date: `${d}/${mo}/${y}`, month: CsvWriter.MONTHS[Number(mo) - 1] ?? '', year: y ?? '' };
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!match) return { date: '', month: '', year: '' };
+    const [, year, month, day] = match;
+    return { date: `${day}/${month}/${year}`, month: CsvWriter.MONTHS[Number(month) - 1] ?? '', year: year ?? '' };
   }
 
   /**
@@ -94,36 +94,36 @@ export class CsvWriter {
     const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // YYYY-MM-DD
     const recapDate = this.#deriveDateParts(todayIso).date;
 
-    const rows: CsvRow[] = records.map((r) => {
-      const p = this.#deriveDateParts(r.date);
+    const rows: CsvRow[] = records.map((record) => {
+      const dateParts = this.#deriveDateParts(record.date);
       return [
         '',                    // Kode — manual
         recapDate,             // Tanggal Rekap
-        r.name,                // Nama Blogger/Vlogger
-        `@${r.handle}`,        // Domain Blog/Vlog
-        r.platform,            // Source
-        r.type,                // Source Type (IG='Reels')
-        p.date,                // Release Date
-        p.month,               // Month Entry
-        r.title,               // Title Article/Video
-        r.url,                 // Link
+        record.name,           // Nama Blogger/Vlogger
+        `@${record.handle}`,   // Domain Blog/Vlog
+        record.platform,       // Source
+        record.type,           // Source Type (IG='Reels')
+        dateParts.date,        // Release Date
+        dateParts.month,       // Month Entry
+        record.title,          // Title Article/Video
+        record.url,            // Link
         '',                    // Product — manual
         '',                    // Brand — manual
         '',                    // Type Content — manual
         '',                    // Tone Article — manual
-        r.comments,            // Commentar(s)
-        r.views,               // View(s)
+        record.comments,       // Commentar(s)
+        record.views,          // View(s)
         '',                    // Value — manual
         '',                    // Name of Event — manual
         1,                     // JML
         '',                    // ID — manual
-        p.year,                // YEAR
+        dateParts.year,        // YEAR
       ];
     });
 
     const outPath = join(this.outputDir, `${this.#slugify(campaign.name)}_${todayIso}.csv`);
     mkdirSync(this.outputDir, { recursive: true });
-    const csv = [this.#formatRow(CsvWriter.HEADER), ...rows.map((r) => this.#formatRow(r))].join('\n') + '\n';
+    const csv = [this.#formatRow(CsvWriter.HEADER), ...rows.map((row) => this.#formatRow(row))].join('\n') + '\n';
     writeFileSync(outPath, csv);
 
     return { outPath, rows };

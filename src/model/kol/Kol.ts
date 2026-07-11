@@ -70,7 +70,7 @@ export class Kol extends Model implements KolRow {
    * @returns The matching KOL, or `null` if none.
    */
   static findByIg(username: string): Kol | null {
-    const u = String(username).toLowerCase();
-    return Kol.getAll().find((k) => k.ig_username.toLowerCase() === u) ?? null;
+    const normalizedUsername = String(username).toLowerCase();
+    return Kol.getAll().find((kol) => kol.ig_username.toLowerCase() === normalizedUsername) ?? null;
   }
 }

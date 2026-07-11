@@ -69,30 +69,32 @@ export class RecapService {
     const since = String(campaign.started_at || '').slice(0, 10);
 
     const kols = Kol.getAll();
-    const anyHandled = kols.some((k) => this.adapters.some((a) => a.canHandle(k)));
+    const anyHandled = kols.some((kol) => this.adapters.some((adapter) => adapter.canHandle(kol)));
     if (!anyHandled) throw new Error('No KOL matches any adapter');
 
     // SEQUENTIAL per KOL (await one at a time). Inside #processKol, adapters run in
     // parallel. Each finished KOL fires onKolDone (in-order progress streaming).
     const perKol: KolResult[] = [];
     for (const kol of kols) {
-      const res = await this.#processKol(kol, campaign, hashtag);
+      const kolResult = await this.#processKol(kol, campaign, hashtag);
       if (onKolDone) {
         try {
-          await onKolDone(res);
+          await onKolDone(kolResult);
         } catch {
           /* progress failed, ignore */
         }
       }
-      perKol.push(res);
+      perKol.push(kolResult);
     }
 
-    const matchedRecords = perKol.flatMap((r) => r.records);
-    const diagnostics = perKol.flatMap((r) => r.diagnostics);
-    const totalCost = diagnostics.reduce((s, d) => s + (d.cost || 0), 0);
+    const matchedRecords = perKol.flatMap((kolResult) => kolResult.records);
+    const diagnostics = perKol.flatMap((kolResult) => kolResult.diagnostics);
+    const totalCost = diagnostics.reduce((sum, diagnostic) => sum + (diagnostic.cost || 0), 0);
 
     // Sort by KOL name (used by both CSV and chat cards). localeCompare 'id', stable within a name.
-    matchedRecords.sort((a, b) => String(a.name).localeCompare(String(b.name), 'id'));
+    matchedRecords.sort((recordA, recordB) =>
+      String(recordA.name).localeCompare(String(recordB.name), 'id'),
+    );
 
     const { outPath, rows } = this.csvWriter.write(matchedRecords, campaign);
     return { campaign, hashtag, since, records: matchedRecords, rows, diagnostics, totalCost, outPath };
@@ -106,14 +108,14 @@ export class RecapService {
    * @returns The KOL's combined records + diagnostics.
    */
   async #processKol(kol: Kol, campaign: Campaign, hashtag: string): Promise<KolResult> {
-    const adapters = this.adapters.filter((a) => a.canHandle(kol)); // no handle -> skip (no row)
+    const adapters = this.adapters.filter((adapter) => adapter.canHandle(kol)); // no handle -> skip (no row)
     const perAdapter = await Promise.all(
-      adapters.map((a) => this.#runAdapter(a, kol, campaign, hashtag)),
+      adapters.map((adapter) => this.#runAdapter(adapter, kol, campaign, hashtag)),
     );
     return {
       kol,
-      records: perAdapter.flatMap((x) => x.records),
-      diagnostics: perAdapter.map((x) => x.diagnostic),
+      records: perAdapter.flatMap((adapterResult) => adapterResult.records),
+      diagnostics: perAdapter.map((adapterResult) => adapterResult.diagnostic),
     };
   }
 
@@ -136,7 +138,7 @@ export class RecapService {
     let records: ContentRecord[];
     try {
       ({ diagnostic, records } = await adapter.fetchContent(kol, campaign));
-    } catch (e) {
+    } catch (error) {
       diagnostic = {
         handle: adapter.getHandleFor(kol),
         name: kol.name,
@@ -144,7 +146,7 @@ export class RecapService {
         scraped: 0,
         errored: 0,
         allError: true,
-        firstError: e instanceof Error ? e.message : String(e),
+        firstError: error instanceof Error ? error.message : String(error),
         cost: 0,
       };
       records = [];
@@ -163,8 +165,8 @@ export class RecapService {
     // CENTRAL hashtag filter — case-insensitive HERE (adapters need not pre-lowercase).
     // Leaky by design (misses untagged content) — audited manually. Do NOT loosen it
     // without a deliberate decision.
-    const matched = records.filter((r) =>
-      (r.hashtags || []).some((h) => String(h).toLowerCase() === hashtag),
+    const matched = records.filter((record) =>
+      (record.hashtags || []).some((tag) => String(tag).toLowerCase() === hashtag),
     );
     return { diagnostic: { ...diagnostic, matched: matched.length }, records: matched };
   }

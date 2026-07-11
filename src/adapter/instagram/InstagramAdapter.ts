@@ -80,9 +80,9 @@ export class InstagramAdapter extends PlatformAdapter {
     const { items } = await this.client.dataset(run.defaultDatasetId).listItems();
     const list = items as unknown as IgItem[];
 
-    const errored = list.filter((it) => it.error);
-    const clean = list.filter((it) => !it.error); // drop deleted/private items
-    const records = clean.map((it) => this.#normalize(it, kol, handle));
+    const errored = list.filter((item) => item.error);
+    const clean = list.filter((item) => !item.error); // drop deleted/private items
+    const records = clean.map((item) => this.#normalize(item, kol, handle));
 
     return {
       diagnostic: {
@@ -101,24 +101,24 @@ export class InstagramAdapter extends PlatformAdapter {
 
   /**
    * Map one raw Apify item to a normalized {@link ContentRecord}.
-   * @param it - The raw Apify item.
+   * @param item - The raw Apify item.
    * @param kol - The KOL it belongs to.
    * @param handle - The Instagram handle.
    * @returns The normalized record.
    */
-  #normalize(it: IgItem, kol: Kol, handle: string): ContentRecord {
+  #normalize(item: IgItem, kol: Kol, handle: string): ContentRecord {
     return {
       name: kol.name,
       platform: this.platform,
       type: 'Reels', // team template "Source Type"; per-platform (TikTok/YT use 'Video')
       handle,
-      title: this.#toTitle(it.caption),
-      url: it.url ?? '',
-      views: it.videoPlayCount ?? '', // videoPlayCount = the real number
-      likes: it.likesCount ?? '',
-      comments: it.commentsCount ?? '',
-      date: this.#toWibDate(it.timestamp),
-      hashtags: Array.isArray(it.hashtags) ? it.hashtags.map((h) => String(h).toLowerCase()) : [],
+      title: this.#toTitle(item.caption),
+      url: item.url ?? '',
+      views: item.videoPlayCount ?? '', // videoPlayCount = the real number
+      likes: item.likesCount ?? '',
+      comments: item.commentsCount ?? '',
+      date: this.#toWibDate(item.timestamp),
+      hashtags: Array.isArray(item.hashtags) ? item.hashtags.map((tag) => String(tag).toLowerCase()) : [],
     };
   }
 
@@ -128,8 +128,8 @@ export class InstagramAdapter extends PlatformAdapter {
    * @returns The title (≤120 chars).
    */
   #toTitle(caption: string | undefined): string {
-    const first = String(caption || '').split('\n')[0]!.trim();
-    return first.length > 120 ? first.slice(0, 117) + '...' : first;
+    const firstLine = String(caption || '').split('\n')[0]!.trim();
+    return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
   }
 
   /**
@@ -138,9 +138,9 @@ export class InstagramAdapter extends PlatformAdapter {
    * @returns `"YYYY-MM-DD"`, or `""` if unparseable.
    */
   #toWibDate(ts: string | undefined): string {
-    const d = new Date(ts ?? '');
-    return Number.isNaN(d.getTime())
+    const date = new Date(ts ?? '');
+    return Number.isNaN(date.getTime())
       ? ''
-      : d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   }
 }

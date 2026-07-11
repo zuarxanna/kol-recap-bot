@@ -54,26 +54,26 @@ export async function runRecap(options?: RunOptions): Promise<RecapResult> {
 const runDirect = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (runDirect) {
   try {
-    const r = await runRecap();
-    console.log(`\n=== recap: "${r.campaign.name}" #${r.hashtag} since ${r.since} ===`);
-    for (const d of r.diagnostics) {
-      const note = d.allError ? ` ⚠ ALL errored (e.g. ${d.firstError})` : '';
+    const recapResult = await runRecap();
+    console.log(`\n=== recap: "${recapResult.campaign.name}" #${recapResult.hashtag} since ${recapResult.since} ===`);
+    for (const diagnostic of recapResult.diagnostics) {
+      const note = diagnostic.allError ? ` ⚠ ALL errored (e.g. ${diagnostic.firstError})` : '';
       console.log(
-        `@${d.handle} [${d.platform}]: scraped ${d.scraped}, errored ${d.errored}, matched #${r.hashtag} → ${d.matched} rows${note}`,
+        `@${diagnostic.handle} [${diagnostic.platform}]: scraped ${diagnostic.scraped}, errored ${diagnostic.errored}, matched #${recapResult.hashtag} → ${diagnostic.matched} rows${note}`,
       );
     }
     console.log(`\n--- RESULT ---`);
-    console.log(`${r.records.length} rows written → ${r.outPath}`);
-    console.log(`total cost = $${r.totalCost.toFixed(4)} for ${r.diagnostics.length} fetches`);
-    if (r.records.length === 0) {
+    console.log(`${recapResult.records.length} rows written → ${recapResult.outPath}`);
+    console.log(`total cost = $${recapResult.totalCost.toFixed(4)} for ${recapResult.diagnostics.length} fetches`);
+    if (recapResult.records.length === 0) {
       console.log(
         `\nEmpty CSV. "scraped N>0" but 0 matched = the filter tradeoff (audit manually). scraped 0 / all errored = a scrape problem (handle/private/token).`,
       );
     }
     console.log(`\nManual steps: add TikTok/YouTube rows, fill Tone, audit missed (untagged) content.\n`);
     process.exit(0);
-  } catch (e) {
-    console.error(`FATAL: ${e instanceof Error ? e.message : String(e)}`);
+  } catch (error) {
+    console.error(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }

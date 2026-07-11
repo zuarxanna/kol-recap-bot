@@ -106,9 +106,9 @@ export class TikTokAdapter extends PlatformAdapter {
     const { items } = await this.client.dataset(run.defaultDatasetId).listItems();
     const list = items as unknown as TikTokItem[];
 
-    const errored = list.filter((it) => it.error);
-    const clean = list.filter((it) => !it.error); // drop error items (private/missing)
-    const records = clean.map((it) => this.#normalize(it, kol, handle));
+    const errored = list.filter((item) => item.error);
+    const clean = list.filter((item) => !item.error); // drop error items (private/missing)
+    const records = clean.map((item) => this.#normalize(item, kol, handle));
 
     return {
       diagnostic: {
@@ -127,26 +127,26 @@ export class TikTokAdapter extends PlatformAdapter {
 
   /**
    * Map one raw Apify item to a normalized {@link ContentRecord}.
-   * @param it - The raw Apify item.
+   * @param item - The raw Apify item.
    * @param kol - The KOL it belongs to.
    * @param handle - The TikTok handle.
    * @returns The normalized record.
    */
-  #normalize(it: TikTokItem, kol: Kol, handle: string): ContentRecord {
+  #normalize(item: TikTokItem, kol: Kol, handle: string): ContentRecord {
     return {
       name: kol.name,
       platform: this.platform,
       type: 'Video', // team template "Source Type" (IG='Reels', TikTok/YT='Video')
       handle,
-      title: this.#toTitle(it.text),
-      url: it.webVideoUrl ?? '',
-      views: it.playCount ?? '', // playCount = the real views (verified)
-      likes: it.diggCount ?? '',
-      comments: it.commentCount ?? '',
-      date: this.#toWibDate(it.createTimeISO),
+      title: this.#toTitle(item.text),
+      url: item.webVideoUrl ?? '',
+      views: item.playCount ?? '', // playCount = the real views (verified)
+      likes: item.diggCount ?? '',
+      comments: item.commentCount ?? '',
+      date: this.#toWibDate(item.createTimeISO),
       // hashtags: [{name}] -> [lowercase string]. RecapService's filter needs this array.
-      hashtags: Array.isArray(it.hashtags)
-        ? it.hashtags.map((h) => String(h?.name || '').toLowerCase()).filter(Boolean)
+      hashtags: Array.isArray(item.hashtags)
+        ? item.hashtags.map((tag) => String(tag?.name || '').toLowerCase()).filter(Boolean)
         : [],
     };
   }
@@ -157,8 +157,8 @@ export class TikTokAdapter extends PlatformAdapter {
    * @returns The title (≤120 chars).
    */
   #toTitle(text: string | undefined): string {
-    const first = String(text || '').split('\n')[0]!.trim();
-    return first.length > 120 ? first.slice(0, 117) + '...' : first;
+    const firstLine = String(text || '').split('\n')[0]!.trim();
+    return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
   }
 
   /**
@@ -167,10 +167,10 @@ export class TikTokAdapter extends PlatformAdapter {
    * @returns `"YYYY-MM-DD"`, or `""` if unparseable.
    */
   #toWibDate(ts: string | undefined): string {
-    const d = new Date(ts ?? '');
-    return Number.isNaN(d.getTime())
+    const date = new Date(ts ?? '');
+    return Number.isNaN(date.getTime())
       ? ''
-      : d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   }
 
   /**
@@ -180,9 +180,9 @@ export class TikTokAdapter extends PlatformAdapter {
    * @returns The date minus one day, or the input if unparseable.
    */
   static #subtractOneDay(iso: string): string {
-    const d = new Date(`${iso}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return iso;
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
+    const date = new Date(`${iso}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return iso;
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
   }
 }

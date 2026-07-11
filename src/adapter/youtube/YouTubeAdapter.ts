@@ -99,7 +99,7 @@ export class YouTubeAdapter extends PlatformAdapter {
     const since = YouTubeAdapter.#subtractOneDay(String(campaign.started_at || '').slice(0, 10));
     const sinceMs = Date.parse(`${since}T00:00:00Z`);
 
-    const diag: FetchDiagnostic = {
+    const diagnostic: FetchDiagnostic = {
       handle,
       name: kol.name,
       platform: this.platform,
@@ -112,60 +112,60 @@ export class YouTubeAdapter extends PlatformAdapter {
 
     try {
       // 1. resolve @handle -> channelId + uploads playlist
-      const ch = await this.#get<YtListResponse<YtChannel>>('channels', {
+      const channelResponse = await this.#get<YtListResponse<YtChannel>>('channels', {
         part: 'contentDetails,snippet',
         forHandle: `@${handle}`,
       });
-      const uploads = ch.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+      const uploads = channelResponse.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
       if (!uploads) {
-        diag.allError = true;
-        diag.firstError = `channel @${handle} not found`;
-        return { diagnostic: diag, records: [] };
+        diagnostic.allError = true;
+        diagnostic.firstError = `channel @${handle} not found`;
+        return { diagnostic, records: [] };
       }
 
       // 2. page the uploads playlist, collect videoIds since `since` (newest first)
-      const ids: string[] = [];
+      const videoIds: string[] = [];
       let pageToken: string | undefined;
-      let done = false;
+      let reachedCutoff = false;
       do {
-        const pl = await this.#get<YtListResponse<YtPlaylistItem>>('playlistItems', {
+        const playlistResponse = await this.#get<YtListResponse<YtPlaylistItem>>('playlistItems', {
           part: 'contentDetails',
           playlistId: uploads,
           maxResults: '50',
           ...(pageToken ? { pageToken } : {}),
         });
-        for (const it of pl.items ?? []) {
-          const pub = Date.parse(it.contentDetails?.videoPublishedAt ?? '');
-          if (Number.isNaN(pub)) continue;
-          if (pub < sinceMs) {
-            done = true;
+        for (const playlistItem of playlistResponse.items ?? []) {
+          const publishedMs = Date.parse(playlistItem.contentDetails?.videoPublishedAt ?? '');
+          if (Number.isNaN(publishedMs)) continue;
+          if (publishedMs < sinceMs) {
+            reachedCutoff = true;
             break;
           } // older than `since` -> stop
-          if (it.contentDetails?.videoId) ids.push(it.contentDetails.videoId);
+          if (playlistItem.contentDetails?.videoId) videoIds.push(playlistItem.contentDetails.videoId);
         }
-        pageToken = done ? undefined : pl.nextPageToken;
+        pageToken = reachedCutoff ? undefined : playlistResponse.nextPageToken;
       } while (pageToken);
 
       // 3. batch videos.list (<=50 ids/call) -> stats + duration + snippet
       const records: ContentRecord[] = [];
-      for (let i = 0; i < ids.length; i += 50) {
-        const batch = ids.slice(i, i + 50);
-        const vids = await this.#get<YtListResponse<YtVideo>>('videos', {
+      for (let offset = 0; offset < videoIds.length; offset += 50) {
+        const batchIds = videoIds.slice(offset, offset + 50);
+        const videosResponse = await this.#get<YtListResponse<YtVideo>>('videos', {
           part: 'snippet,statistics,contentDetails',
-          id: batch.join(','),
+          id: batchIds.join(','),
         });
-        for (const v of vids.items ?? []) records.push(this.#normalize(v, kol, handle));
+        for (const video of videosResponse.items ?? []) records.push(this.#normalize(video, kol, handle));
       }
 
-      diag.scraped = records.length;
-      diag.errored = ids.length - records.length; // ids requested but not returned = error/gone
-      diag.allError = ids.length > 0 && records.length === 0;
-      return { diagnostic: diag, records };
-    } catch (e) {
+      diagnostic.scraped = records.length;
+      diagnostic.errored = videoIds.length - records.length; // ids requested but not returned = error/gone
+      diagnostic.allError = videoIds.length > 0 && records.length === 0;
+      return { diagnostic, records };
+    } catch (error) {
       // one channel error must not kill the whole run — report it via the diagnostic
-      diag.allError = true;
-      diag.firstError = e instanceof Error ? e.message : String(e);
-      return { diagnostic: diag, records: [] };
+      diagnostic.allError = true;
+      diagnostic.firstError = error instanceof Error ? error.message : String(error);
+      return { diagnostic, records: [] };
     }
   }
 
@@ -178,38 +178,38 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @throws If the response status is non-2xx (message from the API, else the status).
    */
   async #get<T>(resource: string, params: Record<string, string>): Promise<T> {
-    const qs = new URLSearchParams({ ...params, key: this.apiKey });
-    const res = await fetch(`${API}/${resource}?${qs}`);
-    const data = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
-    if (!res.ok) {
-      const msg = data?.error?.message || `HTTP ${res.status}`;
-      throw new Error(`YouTube ${resource}: ${msg}`);
+    const query = new URLSearchParams({ ...params, key: this.apiKey });
+    const response = await fetch(`${API}/${resource}?${query}`);
+    const data = (await response.json().catch(() => ({}))) as T & { error?: { message?: string } };
+    if (!response.ok) {
+      const message = data?.error?.message || `HTTP ${response.status}`;
+      throw new Error(`YouTube ${resource}: ${message}`);
     }
     return data;
   }
 
   /**
    * Map one raw video resource to a normalized {@link ContentRecord}.
-   * @param v - The raw video resource.
+   * @param video - The raw video resource.
    * @param kol - The KOL it belongs to.
    * @param handle - The YouTube handle.
    * @returns The normalized record.
    */
-  #normalize(v: YtVideo, kol: Kol, handle: string): ContentRecord {
-    const s = v.statistics ?? {};
+  #normalize(video: YtVideo, kol: Kol, handle: string): ContentRecord {
+    const stats = video.statistics ?? {};
     return {
       name: kol.name,
       platform: this.platform,
-      type: this.#isShort(v.contentDetails?.duration) ? 'Shorts' : 'Video',
+      type: this.#isShort(video.contentDetails?.duration) ? 'Shorts' : 'Video',
       handle, // without @; CsvWriter renders `@handle`
-      title: this.#toTitle(v.snippet?.title),
-      url: `https://www.youtube.com/watch?v=${v.id ?? ''}`,
-      views: s.viewCount != null ? Number(s.viewCount) : '',
-      likes: s.likeCount != null ? Number(s.likeCount) : '', // '' when likes are hidden
-      comments: s.commentCount != null ? Number(s.commentCount) : '', // '' when comments are disabled
-      date: this.#toWibDate(v.snippet?.publishedAt),
+      title: this.#toTitle(video.snippet?.title),
+      url: `https://www.youtube.com/watch?v=${video.id ?? ''}`,
+      views: stats.viewCount != null ? Number(stats.viewCount) : '',
+      likes: stats.likeCount != null ? Number(stats.likeCount) : '', // '' when likes are hidden
+      comments: stats.commentCount != null ? Number(stats.commentCount) : '', // '' when comments are disabled
+      date: this.#toWibDate(video.snippet?.publishedAt),
       // YouTube has no structured hashtag array -> extract from title+description (NOT snippet.tags)
-      hashtags: this.#extractHashtags(`${v.snippet?.title || ''}\n${v.snippet?.description || ''}`),
+      hashtags: this.#extractHashtags(`${video.snippet?.title || ''}\n${video.snippet?.description || ''}`),
     };
   }
 
@@ -219,11 +219,11 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns Lowercased hashtags without `"#"`, deduped.
    */
   #extractHashtags(text: string): string[] {
-    const set = new Set<string>();
-    for (const m of String(text).matchAll(/#[\p{L}\p{N}_]+/gu)) {
-      set.add(m[0].slice(1).toLowerCase());
+    const tagSet = new Set<string>();
+    for (const match of String(text).matchAll(/#[\p{L}\p{N}_]+/gu)) {
+      tagSet.add(match[0].slice(1).toLowerCase());
     }
-    return [...set];
+    return [...tagSet];
   }
 
   /**
@@ -237,10 +237,10 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns `true` if the duration is 1–60 seconds.
    */
   #isShort(iso: string | undefined): boolean {
-    const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(iso || ''));
-    if (!m) return false;
-    const secs = (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0));
-    return secs > 0 && secs <= 60;
+    const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(iso || ''));
+    if (!match) return false;
+    const totalSeconds = (+(match[1] ?? 0)) * 3600 + (+(match[2] ?? 0)) * 60 + (+(match[3] ?? 0));
+    return totalSeconds > 0 && totalSeconds <= 60;
   }
 
   /**
@@ -249,10 +249,10 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns The handle without `"@"` or any URL path.
    */
   #normalizeHandle(raw: string): string {
-    let h = String(raw || '').trim();
-    const at = h.lastIndexOf('@');
-    if (at >= 0) h = h.slice(at + 1); // take everything after "@" (also handles URLs like .../@name)
-    return h.split(/[/?#]/)[0] ?? '';
+    let cleaned = String(raw || '').trim();
+    const atIndex = cleaned.lastIndexOf('@');
+    if (atIndex >= 0) cleaned = cleaned.slice(atIndex + 1); // take everything after "@" (also handles URLs like .../@name)
+    return cleaned.split(/[/?#]/)[0] ?? '';
   }
 
   /**
@@ -261,8 +261,8 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns The title (≤120 chars).
    */
   #toTitle(title: string | undefined): string {
-    const first = String(title || '').split('\n')[0]!.trim();
-    return first.length > 120 ? first.slice(0, 117) + '...' : first;
+    const firstLine = String(title || '').split('\n')[0]!.trim();
+    return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
   }
 
   /**
@@ -271,10 +271,10 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns `"YYYY-MM-DD"`, or `""` if unparseable.
    */
   #toWibDate(ts: string | undefined): string {
-    const d = new Date(ts ?? '');
-    return Number.isNaN(d.getTime())
+    const date = new Date(ts ?? '');
+    return Number.isNaN(date.getTime())
       ? ''
-      : d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   }
 
   /**
@@ -284,9 +284,9 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @returns The date minus one day, or the input if unparseable.
    */
   static #subtractOneDay(iso: string): string {
-    const d = new Date(`${iso}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return iso;
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
+    const date = new Date(`${iso}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return iso;
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
   }
 }

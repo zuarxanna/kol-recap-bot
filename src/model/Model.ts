@@ -74,7 +74,7 @@ const writeRows = (table: string, rows: ModelRow[]): void => {
  * @returns `max(id) + 1`, or `1` when the set is empty.
  */
 const nextId = (rows: ModelRow[]): number =>
-  rows.length ? Math.max(...rows.map((r) => Number(r.id) || 0)) + 1 : 1;
+  rows.length ? Math.max(...rows.map((row) => Number(row.id) || 0)) + 1 : 1;
 
 /**
  * Abstract ActiveRecord-style base for JSON-file-backed models.
@@ -89,7 +89,7 @@ const nextId = (rows: ModelRow[]): number =>
  *
  * @example
  * ```ts
- * const kols = Kol.getAll();                        // read all
+ * const kols = Kol.getAll();                     // read all
  * const kol  = new Kol({ name, ig_username }).save(); // create (auto id + created_at)
  * Kol.find(kol.id)?.delete();                    // delete
  * ```
@@ -128,7 +128,7 @@ export abstract class Model implements ModelRow {
    * @returns All records.
    */
   static getAll<T extends Model>(this: ModelStatic<T>): T[] {
-    return readRows(this.table).map((r) => this.hydrate(r));
+    return readRows(this.table).map((row) => this.hydrate(row));
   }
 
   /**
@@ -138,7 +138,7 @@ export abstract class Model implements ModelRow {
    * @returns The matching record, or `null` if none exists.
    */
   static find<T extends Model>(this: ModelStatic<T>, id: number): T | null {
-    const row = readRows(this.table).find((r) => r.id === id);
+    const row = readRows(this.table).find((candidate) => candidate.id === id);
     return row ? this.hydrate(row) : null;
   }
 
@@ -148,7 +148,7 @@ export abstract class Model implements ModelRow {
    * @param models - The full set of records to persist.
    */
   static saveAll<T extends Model>(this: ModelStatic<T>, models: T[]): void {
-    writeRows(this.table, models.map((m) => m.toRow()));
+    writeRows(this.table, models.map((model) => model.toRow()));
   }
 
   // ---- CRUD: write (instance) ----
@@ -161,9 +161,9 @@ export abstract class Model implements ModelRow {
   save(): this {
     const { table } = this.constructor as typeof Model;
     const rows = readRows(table);
-    const idx = this.id ? rows.findIndex((r) => r.id === this.id) : -1;
-    if (idx >= 0) {
-      rows[idx] = this.toRow();
+    const existingIndex = this.id ? rows.findIndex((row) => row.id === this.id) : -1;
+    if (existingIndex >= 0) {
+      rows[existingIndex] = this.toRow();
     } else {
       this.id = this.id || nextId(rows);
       rows.push(this.toRow());
@@ -177,6 +177,6 @@ export abstract class Model implements ModelRow {
    */
   delete(): void {
     const { table } = this.constructor as typeof Model;
-    writeRows(table, readRows(table).filter((r) => r.id !== this.id));
+    writeRows(table, readRows(table).filter((row) => row.id !== this.id));
   }
 }
