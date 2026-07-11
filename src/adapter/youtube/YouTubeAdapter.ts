@@ -76,7 +76,7 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @param kol - The KOL.
    * @returns The cleaned YouTube handle (no `"@"`, no URL path).
    */
-  handleFor(kol: Kol): string {
+  getHandleFor(kol: Kol): string {
     return this.#normalizeHandle(kol.youtube_channel);
   }
 
@@ -96,7 +96,7 @@ export class YouTubeAdapter extends PlatformAdapter {
     // WIDEN by 1 day: publishedAt is UTC, our date is WIB (+7). An early-morning WIB
     // post on day 1 is the previous day in UTC, so without widening it can be dropped.
     // Over-fetching 1 day is safe (the hashtag filter keeps the output correct).
-    const since = YouTubeAdapter.#minusOneDay(String(campaign.started_at || '').slice(0, 10));
+    const since = YouTubeAdapter.#subtractOneDay(String(campaign.started_at || '').slice(0, 10));
     const sinceMs = Date.parse(`${since}T00:00:00Z`);
 
     const diag: FetchDiagnostic = {
@@ -283,7 +283,7 @@ export class YouTubeAdapter extends PlatformAdapter {
    * @param iso - Date as `"YYYY-MM-DD"`.
    * @returns The date minus one day, or the input if unparseable.
    */
-  static #minusOneDay(iso: string): string {
+  static #subtractOneDay(iso: string): string {
     const d = new Date(`${iso}T00:00:00Z`);
     if (Number.isNaN(d.getTime())) return iso;
     d.setUTCDate(d.getUTCDate() - 1);

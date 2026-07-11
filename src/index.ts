@@ -216,29 +216,29 @@ bot.help((ctx) => say(ctx, HELP));
 
 // --- /status ---
 bot.command('status', (ctx) => {
-  const c = Campaign.active();
-  const igCount = Kol.all().filter((k) => k.ig_username?.trim()).length;
+  const c = Campaign.findActive();
+  const igCount = Kol.getAll().filter((k) => k.ig_username?.trim()).length;
   if (!c) return say(ctx, `No active campaign.\n<b>KOLs with IG:</b> ${igCount}`);
   return say(ctx, `<b>Active campaign</b>\n${fmtCampaign(c)}\n\n<b>KOLs with IG:</b> ${igCount}`);
 });
 
 // --- /campaigns ---
 bot.command('campaigns', (ctx) => {
-  const list = Campaign.all();
+  const list = Campaign.getAll();
   if (!list.length) return say(ctx, 'No campaigns yet.');
   return say(ctx, list.map(fmtCampaign).join('\n\n'));
 });
 
 // --- /kols ---
 bot.command('kols', (ctx) => {
-  const list = Kol.all();
+  const list = Kol.getAll();
   if (!list.length) return say(ctx, 'No KOLs yet.');
   return say(ctx, list.map(fmtKol).join('\n\n'));
 });
 
 // --- /recap ---
 bot.command('recap', async (ctx) => {
-  const c = Campaign.active();
+  const c = Campaign.findActive();
   if (!c) return say(ctx, 'No active campaign. Run /activate first.');
   if (recapRunning) return say(ctx, 'A recap is already running. Wait for it to finish.');
 

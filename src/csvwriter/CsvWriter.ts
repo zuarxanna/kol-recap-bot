@@ -40,7 +40,7 @@ export class CsvWriter {
    * @param v - The raw cell value.
    * @returns The value, quoted if it contains a comma/quote/newline (inner quotes doubled).
    */
-  #cell(v: string | number | null | undefined): string {
+  #formatCell(v: string | number | null | undefined): string {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
@@ -50,8 +50,8 @@ export class CsvWriter {
    * @param arr - The row cells.
    * @returns The comma-joined, escaped line.
    */
-  #row(arr: CsvRow): string {
-    return arr.map((v) => this.#cell(v)).join(',');
+  #formatRow(arr: CsvRow): string {
+    return arr.map((v) => this.#formatCell(v)).join(',');
   }
 
   /**
@@ -59,7 +59,7 @@ export class CsvWriter {
    * @param name - The campaign name.
    * @returns A lowercase, hyphenated slug.
    */
-  #slug(name: string): string {
+  #slugify(name: string): string {
     return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
@@ -72,7 +72,7 @@ export class CsvWriter {
    * @param iso - Date as `"YYYY-MM-DD"`.
    * @returns `{ date: "DD/MM/YYYY", month: "Jun", year: "2026" }`, or empty strings if unparseable.
    */
-  #dateParts(iso: string): { date: string; month: string; year: string } {
+  #deriveDateParts(iso: string): { date: string; month: string; year: string } {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
     if (!m) return { date: '', month: '', year: '' };
     const [, y, mo, d] = m;
@@ -92,10 +92,10 @@ export class CsvWriter {
    */
   write(records: ContentRecord[], campaign: Campaign): { outPath: string; rows: CsvRow[] } {
     const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // YYYY-MM-DD
-    const recapDate = this.#dateParts(todayIso).date;
+    const recapDate = this.#deriveDateParts(todayIso).date;
 
     const rows: CsvRow[] = records.map((r) => {
-      const p = this.#dateParts(r.date);
+      const p = this.#deriveDateParts(r.date);
       return [
         '',                    // Kode — manual
         recapDate,             // Tanggal Rekap
@@ -121,9 +121,9 @@ export class CsvWriter {
       ];
     });
 
-    const outPath = join(this.outputDir, `${this.#slug(campaign.name)}_${todayIso}.csv`);
+    const outPath = join(this.outputDir, `${this.#slugify(campaign.name)}_${todayIso}.csv`);
     mkdirSync(this.outputDir, { recursive: true });
-    const csv = [this.#row(CsvWriter.HEADER), ...rows.map((r) => this.#row(r))].join('\n') + '\n';
+    const csv = [this.#formatRow(CsvWriter.HEADER), ...rows.map((r) => this.#formatRow(r))].join('\n') + '\n';
     writeFileSync(outPath, csv);
 
     return { outPath, rows };

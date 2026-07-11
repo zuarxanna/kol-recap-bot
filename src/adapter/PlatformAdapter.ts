@@ -30,7 +30,7 @@ export abstract class PlatformAdapter {
    * @param _kol - The KOL whose handle to resolve.
    * @returns The bare handle, or `""` if none.
    */
-  handleFor(_kol: Kol): string {
+  getHandleFor(_kol: Kol): string {
     return '';
   }
 

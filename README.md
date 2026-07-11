@@ -186,15 +186,15 @@ The shapes are defined in `src/types.ts`:
 Two flat JSON files in `db/` are the single source of truth (data only). Each entity is
 a **class-based model** (`src/model/`) extending an abstract `Model` that provides
 file-backed CRUD —
-`Kol.all()`, `Kol.find(id)`, `new Kol({...}).save()`, `kol.delete()`,
-`Campaign.active()`, `Campaign.activate(id)`. Every model row carries an `id` and a
+`Kol.getAll()`, `Kol.find(id)`, `new Kol({...}).save()`, `kol.delete()`,
+`Campaign.findActive()`, `Campaign.activate(id)`. Every model row carries an `id` and a
 `created_at`. Reads always hit disk fresh, so edits (direct or via bot commands) take
 effect without a restart.
 
 ```ts
 import { Kol, Campaign } from './model/index.js';
 
-const kols = Kol.all();                       // read all
+const kols = Kol.getAll();                       // read all
 const kol  = new Kol({ name, ig_username }).save();  // create (auto id + created_at)
 Kol.find(kol.id)?.delete();                   // delete
 Campaign.activate(2);                          // update: make #2 active, others ended

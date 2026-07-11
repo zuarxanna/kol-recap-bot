@@ -61,14 +61,14 @@ export class RecapService {
    * @throws If there is no active campaign, it has no hashtag, or no KOL matches any adapter.
    */
   async run({ onKolDone }: RunOptions = {}): Promise<RecapResult> {
-    const campaign = Campaign.active();
+    const campaign = Campaign.findActive();
     if (!campaign) throw new Error('No campaign with status=active in db/campaigns.json');
 
     const hashtag = String(campaign.hashtag || '').replace(/^#/, '').toLowerCase();
     if (!hashtag) throw new Error(`Active campaign "${campaign.name}" has no hashtag`);
     const since = String(campaign.started_at || '').slice(0, 10);
 
-    const kols = Kol.all();
+    const kols = Kol.getAll();
     const anyHandled = kols.some((k) => this.adapters.some((a) => a.canHandle(k)));
     if (!anyHandled) throw new Error('No KOL matches any adapter');
 
@@ -138,7 +138,7 @@ export class RecapService {
       ({ diagnostic, records } = await adapter.fetchContent(kol, campaign));
     } catch (e) {
       diagnostic = {
-        handle: adapter.handleFor(kol),
+        handle: adapter.getHandleFor(kol),
         name: kol.name,
         platform: adapter.platform,
         scraped: 0,
@@ -156,7 +156,7 @@ export class RecapService {
     if (diagnostic.allError) {
       return {
         diagnostic: { ...diagnostic, matched: 0 },
-        records: [this.#placeholder(kol, adapter, diagnostic)],
+        records: [this.#buildPlaceholder(kol, adapter, diagnostic)],
       };
     }
 
@@ -183,12 +183,12 @@ export class RecapService {
    * @param diagnostic - The failure diagnostic (for the handle).
    * @returns A single placeholder record.
    */
-  #placeholder(kol: Kol, adapter: PlatformAdapter, diagnostic: FetchDiagnostic): ContentRecord {
+  #buildPlaceholder(kol: Kol, adapter: PlatformAdapter, diagnostic: FetchDiagnostic): ContentRecord {
     return {
       name: kol.name,
       platform: adapter.platform,
       type: '-',
-      handle: diagnostic.handle || adapter.handleFor(kol),
+      handle: diagnostic.handle || adapter.getHandleFor(kol),
       title: '-',
       url: '-',
       views: '-',

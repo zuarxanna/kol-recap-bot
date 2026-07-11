@@ -89,7 +89,7 @@ const nextId = (rows: ModelRow[]): number =>
  *
  * @example
  * ```ts
- * const kols = Kol.all();                        // read all
+ * const kols = Kol.getAll();                        // read all
  * const kol  = new Kol({ name, ig_username }).save(); // create (auto id + created_at)
  * Kol.find(kol.id)?.delete();                    // delete
  * ```
@@ -127,7 +127,7 @@ export abstract class Model implements ModelRow {
    * @typeParam T - The concrete model type (inferred from the calling subclass).
    * @returns All records.
    */
-  static all<T extends Model>(this: ModelStatic<T>): T[] {
+  static getAll<T extends Model>(this: ModelStatic<T>): T[] {
     return readRows(this.table).map((r) => this.hydrate(r));
   }
 

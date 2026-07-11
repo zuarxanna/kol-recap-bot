@@ -71,6 +71,6 @@ export class Kol extends Model implements KolRow {
    */
   static findByIg(username: string): Kol | null {
     const u = String(username).toLowerCase();
-    return Kol.all().find((k) => k.ig_username.toLowerCase() === u) ?? null;
+    return Kol.getAll().find((k) => k.ig_username.toLowerCase() === u) ?? null;
   }
 }

@@ -57,7 +57,7 @@ export class InstagramAdapter extends PlatformAdapter {
    * @param kol - The KOL.
    * @returns The cleaned Instagram handle.
    */
-  handleFor(kol: Kol): string {
+  getHandleFor(kol: Kol): string {
     return String(kol.ig_username || '').trim();
   }
 

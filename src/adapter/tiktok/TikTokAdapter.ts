@@ -63,7 +63,7 @@ export class TikTokAdapter extends PlatformAdapter {
    * @param kol - The KOL.
    * @returns The cleaned TikTok handle.
    */
-  handleFor(kol: Kol): string {
+  getHandleFor(kol: Kol): string {
     return String(kol.tiktok_username || '').trim();
   }
 
@@ -79,7 +79,7 @@ export class TikTokAdapter extends PlatformAdapter {
     // post on campaign day 1 is the previous day in UTC, so without widening it would be
     // silently dropped. Over-fetching 1 day is safe: the hashtag filter and WIB bucketing
     // keep the output correct. Mirrors the console test that works.
-    const since = TikTokAdapter.#minusOneDay(String(campaign.started_at || '').slice(0, 10));
+    const since = TikTokAdapter.#subtractOneDay(String(campaign.started_at || '').slice(0, 10));
 
     // Input MIRRORS the console test proven to work. Date param = oldestPostDateUnified
     // (NOT oldestPostDate — that name is silently ignored).
@@ -179,7 +179,7 @@ export class TikTokAdapter extends PlatformAdapter {
    * @param iso - Date as `"YYYY-MM-DD"`.
    * @returns The date minus one day, or the input if unparseable.
    */
-  static #minusOneDay(iso: string): string {
+  static #subtractOneDay(iso: string): string {
     const d = new Date(`${iso}T00:00:00Z`);
     if (Number.isNaN(d.getTime())) return iso;
     d.setUTCDate(d.getUTCDate() - 1);

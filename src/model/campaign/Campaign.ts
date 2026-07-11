@@ -77,8 +77,8 @@ export class Campaign extends Model implements CampaignRow {
    * Get the single active campaign.
    * @returns The active campaign, or `null` if none is active.
    */
-  static active(): Campaign | null {
-    return Campaign.all().find((c) => c.isActive) ?? null;
+  static findActive(): Campaign | null {
+    return Campaign.getAll().find((c) => c.isActive) ?? null;
   }
 
   /**
@@ -88,7 +88,7 @@ export class Campaign extends Model implements CampaignRow {
    * @returns The activated campaign, or `null` if the id does not exist.
    */
   static activate(id: number): Campaign | null {
-    const all = Campaign.all();
+    const all = Campaign.getAll();
     if (!all.some((c) => c.id === id)) return null;
     for (const c of all) c.isActive = c.id === id;
     Campaign.saveAll(all);
