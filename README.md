@@ -12,20 +12,41 @@ No web UI. No LLM in the data path. Deterministic.
 
 ---
 
-## The problem this solves
+## Problem statement
 
-A KOL handler at an automotive company runs the following loop every campaign:
+I built this for someone close to me — a KOL handler at an automotive company — who
+lost hours to the same chore after every campaign.
+
+The loop, every time:
 
 - Invite bloggers/vloggers to an event (a launch, etc.).
 - KOLs create and upload content (that day or a few days later).
-- There is a ~2-week window (a cutoff) to compile the recap.
-- The public metrics (like / comment / view) for each piece of content on IG, TikTok,
-  and YouTube must be collected into the team's spreadsheet template.
+- Within a ~2-week cutoff, compile the recap.
+- Collect the public metrics (like / comment / view) for each piece of content on
+  Instagram, TikTok, and YouTube into the team's spreadsheet template.
 
-Doing this by hand across dozens of KOLs and three platforms is slow and error-prone.
-This tool automates the **finding and measuring** part and hands back a CSV in the
-exact shape the team already uses, so the remaining human work is just judgment calls
-(tone, campaign constants, auditing untagged content).
+She did it by hand — open each post, read the numbers, type them in, repeat. Dozens of
+KOLs, three platforms, every campaign. No tooling.
+
+What bugged me: those numbers are **public**. They should be trivial to read. But the
+platforms gate them on purpose — that access is something they'd rather sell.
+
+Then I nearly over-engineered it:
+
+- **Scrape the sites directly** → walled off by antibot. Blocked, every time.
+- **A fancy AI "browser agent"** that clicks around like a human → expensive, and the
+  results weren't even good. I was drifting from the actual problem toward shiny tech.
+- **A pretty dashboard** with charts → looked great in my head; in practice it left
+  half the work still manual. Not what was needed.
+
+The fix was boring, and that's the point. [Apify](https://apify.com) already handles
+the antibot problem cheaply — I just ask it for the data. The interface is a Telegram
+bot: type one command, wait, get the recap file. Near-zero cost.
+
+Hours of manual work per campaign became a couple of minutes. This tool automates the
+**finding and measuring**; the remaining human work is judgment calls (tone, campaign
+constants, auditing untagged content). Not the flashiest thing I've built — but it
+solves a real problem and stays out of its own way.
 
 ---
 
