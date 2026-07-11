@@ -17,12 +17,10 @@
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { InstagramAdapter } from './adapters/InstagramAdapter.js';
-import { TikTokAdapter } from './adapters/TikTokAdapter.js';
-import { YouTubeAdapter } from './adapters/YouTubeAdapter.js';
+import { InstagramAdapter, TikTokAdapter, YouTubeAdapter } from './adapters/index.js';
 import { CsvWriter } from './CsvWriter.js';
 import { RecapService } from './RecapService.js';
-import type { PlatformAdapter } from './adapters/PlatformAdapter.js';
+import type { PlatformAdapter } from './adapters/index.js';
 import type { RecapResult, RunOptions } from './types.js';
 
 /** Composition root: assemble the active adapters + writer into a RecapService. */

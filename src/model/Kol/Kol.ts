@@ -1,7 +1,7 @@
 // Kol.ts — a KOL (influencer) master record. Extends Model (JSON-file-backed CRUD).
 
-import { Model } from './Model.js';
-import type { ModelRow } from './Model.js';
+import { Model } from '../Model.js';
+import type { ModelRow } from '../Model.js';
 
 /** The persisted shape of a KOL row. */
 export interface KolRow extends ModelRow {

@@ -90,12 +90,17 @@ src/
   bot.ts               ENTRY: Telegram bot (telegraf, long-polling)
   RecapService.ts      orchestrator; owns the central hashtag filter + sort (DIP)
   CsvWriter.ts         records -> CSV (21-col team template)
-  model/               data-model classes (sibling of adapters)
+  model/               data-model classes (sibling of adapters); one folder per domain
     index.ts           re-exports Model + all models: import { Kol, Campaign } from './model/index.js'
     Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
-    Kol.ts             extends Model (+ findByIg)
-    Campaign.ts        extends Model (+ active/activate, single-active invariant)
+    Kol/
+      index.ts
+      Kol.ts           extends Model (+ findByIg)
+    Campaign/
+      index.ts
+      Campaign.ts      extends Model (+ active/activate, single-active invariant)
   adapters/
+    index.ts           re-exports PlatformAdapter + all adapters
     PlatformAdapter.ts  abstract base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
     InstagramAdapter.ts Apify apify/instagram-reel-scraper
     TikTokAdapter.ts    Apify clockworks/tiktok-scraper

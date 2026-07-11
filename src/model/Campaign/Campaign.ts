@@ -1,8 +1,8 @@
 // Campaign.ts — a campaign master record. Extends Model (JSON-file-backed CRUD).
 // Exactly one campaign is "active" at a time (enforced by activate()).
 
-import { Model } from './Model.js';
-import type { ModelRow } from './Model.js';
+import { Model } from '../Model.js';
+import type { ModelRow } from '../Model.js';
 
 export type CampaignStatus = 'active' | 'ended';
 
