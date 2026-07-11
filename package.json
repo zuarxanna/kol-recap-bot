@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "KOL metrics recap — Telegram bot + Apify + YouTube Data API, local JSON storage",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
