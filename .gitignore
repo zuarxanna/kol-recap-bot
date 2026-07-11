@@ -6,9 +6,6 @@ out/
 
 # Internal working docs — kept locally, not pushed (content folded into README.md)
 CHECKPOINT.md
-CONTEXT.md
-PLAN.md
-FLOW.md
 THREADS_POST.md
 
 # Real master data — copy the *.example.json templates to create these.
