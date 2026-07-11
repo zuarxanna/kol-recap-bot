@@ -1,12 +1,12 @@
 // types.ts — shared domain types for the whole project.
 //
 // The data-model entities (Kol, Campaign) are class-based models that own their own
-// persistence — they live in db/model/. They are re-exported here so the rest of the
-// app can keep importing domain types from a single place. This file also defines the
-// normalized content the adapters produce (ContentRecord) and the diagnostics/results
-// that flow through RecapService.
+// persistence — they live in src/model/ (data itself lives in db/). They are
+// re-exported here so the rest of the app can keep importing domain types from a single
+// place. This file also defines the normalized content the adapters produce
+// (ContentRecord) and the diagnostics/results that flow through RecapService.
 
-import type { Kol, Campaign } from '../db/index.js';
+import type { Kol, Campaign } from './model/index.js';
 
 export type { Kol, Campaign };
 

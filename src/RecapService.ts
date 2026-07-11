@@ -8,7 +8,7 @@
 // filter -> onKolDone callback per finished KOL (progress) -> flatten + sort by name
 // -> CsvWriter -> result.
 
-import { Campaign, Kol } from '../db/index.js';
+import { Campaign, Kol } from './model/index.js';
 import type { CsvWriter } from './CsvWriter.js';
 import type { PlatformAdapter } from './adapters/PlatformAdapter.js';
 import type {

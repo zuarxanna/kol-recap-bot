@@ -10,5 +10,5 @@ THREADS_POST.md
 
 # Real master data — copy the *.example.json templates to create these.
 # They hold real KOL handles, so they stay out of the repo.
-db/model/Kol/kols.json
-db/model/Campaign/campaigns.json
+db/kols.json
+db/campaigns.json

@@ -12,7 +12,7 @@
 import 'dotenv/config';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { runRecap } from './recap.js';
-import { Campaign, Kol } from '../db/index.js';
+import { Campaign, Kol } from './model/index.js';
 import type { ContentRecord, KolResult } from './types.js';
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_IDS } = process.env;

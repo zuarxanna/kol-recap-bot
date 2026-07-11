@@ -5,9 +5,10 @@
 // file (`static table`), how to rebuild an instance from a plain row (`static hydrate`),
 // and how to serialize back to a plain row (`toRow`).
 //
-// DATA_DIR resolves from the working directory (process.cwd()/db) so the compiled
-// dist/db/model/*.js still reads the real db/*.json and the Docker volume. Override
-// with DATA_DIR.
+// Model code lives in src/model/, but the DATA lives in db/ (data-only). DATA_DIR
+// resolves from the working directory (process.cwd()/db), NOT relative to this module,
+// so the compiled dist/src/model/*.js still reads the real db/*.json and the Docker
+// volume. Override with DATA_DIR.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';

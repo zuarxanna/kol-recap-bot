@@ -33,7 +33,7 @@ exact shape the team already uses, so the remaining human work is just judgment 
 
 ```mermaid
 flowchart TD
-  DB[("db/model/Kol/kols.json<br/>db/model/Campaign/campaigns.json")] --> RS["RecapService<br/>(orchestrator)"]
+  DB[("db/kols.json<br/>db/campaigns.json")] --> RS["RecapService<br/>(orchestrator)"]
   RS --> AC{"active<br/>campaign?"}
   AC -- none --> ERR["error: no active campaign"]
   AC -- yes --> LOOP["for each KOL<br/>(sequential)"]
@@ -79,27 +79,22 @@ contract, so adding a platform never touches the core.
 
 ```
 tsconfig.json          TypeScript config (NodeNext, strict) -> outputs to dist/
-db/
-  index.ts             db barrel: import { Kol, Campaign } from '../db/index.js'
-  model/
-    index.ts           re-exports every domain model + the base
-    Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
-    Kol/               one folder per domain (class + data + barrel)
-      index.ts
-      Kol.ts           extends Model (+ findByIg)
-      kols.json        real data (gitignored; copy from kols.example.json)
-      kols.example.json committed template
-    Campaign/
-      index.ts
-      Campaign.ts      extends Model (+ active/activate, single-active invariant)
-      campaigns.json   real data (gitignored; copy from campaigns.example.json)
-      campaigns.example.json committed template
+db/                    DATA ONLY (JSON) — read/written at runtime via process.cwd()/db
+  kols.json            real data (gitignored; copy from kols.example.json)
+  kols.example.json    committed template
+  campaigns.json       real data (gitignored; copy from campaigns.example.json)
+  campaigns.example.json committed template
 src/
-  types.ts             shared types (ContentRecord, FetchDiagnostic, ...); re-exports Kol/Campaign from db/model
+  types.ts             shared types (ContentRecord, FetchDiagnostic, ...); re-exports Kol/Campaign from model/
   recap.ts             ENTRY + composition root: wires adapters -> RecapService; exports runRecap() + CLI
   bot.ts               ENTRY: Telegram bot (telegraf, long-polling)
   RecapService.ts      orchestrator; owns the central hashtag filter + sort (DIP)
   CsvWriter.ts         records -> CSV (21-col team template)
+  model/               data-model classes (sibling of adapters)
+    index.ts           re-exports Model + all models: import { Kol, Campaign } from './model/index.js'
+    Model.ts           abstract ActiveRecord base: id + created_at, file-backed CRUD (all/find/save/delete/saveAll)
+    Kol.ts             extends Model (+ findByIg)
+    Campaign.ts        extends Model (+ active/activate, single-active invariant)
   adapters/
     PlatformAdapter.ts  abstract base contract: canHandle(kol), fetchContent(kol, campaign) -> { diagnostic, records[] }
     InstagramAdapter.ts Apify apify/instagram-reel-scraper
@@ -147,15 +142,16 @@ The shapes are defined in `src/types.ts`:
 
 ## Data model (the `db/` pattern)
 
-Two flat JSON files are the single source of truth. Each entity is a **class-based
-model** (`db/model/`) extending an abstract `Model` that provides file-backed CRUD —
+Two flat JSON files in `db/` are the single source of truth (data only). Each entity is
+a **class-based model** (`src/model/`) extending an abstract `Model` that provides
+file-backed CRUD —
 `Kol.all()`, `Kol.find(id)`, `new Kol({...}).save()`, `kol.delete()`,
 `Campaign.active()`, `Campaign.activate(id)`. Every model row carries an `id` and a
 `created_at`. Reads always hit disk fresh, so edits (direct or via bot commands) take
 effect without a restart.
 
 ```ts
-import { Kol, Campaign } from './db/index.js';
+import { Kol, Campaign } from './model/index.js';
 
 const kols = Kol.all();                       // read all
 const kol  = new Kol({ name, ig_username }).save();  // create (auto id + created_at)
@@ -163,7 +159,7 @@ Kol.find(kol.id)?.delete();                   // delete
 Campaign.activate(2);                          // update: make #2 active, others ended
 ```
 
-**`db/model/Kol/kols.json`** — one entry per KOL:
+**`db/kols.json`** — one entry per KOL:
 
 ```json
 {
@@ -179,7 +175,7 @@ Campaign.activate(2);                          // update: make #2 active, others
 - Handles are stored **bare** (no `@`, no URL). The YouTube adapter re-adds `@` when
   the API needs it. Leave a platform field as `""` to skip that platform for this KOL.
 
-**`db/model/Campaign/campaigns.json`** — exactly one entry has `"status": "active"`:
+**`db/campaigns.json`** — exactly one entry has `"status": "active"`:
 
 ```json
 {
@@ -196,9 +192,8 @@ Campaign.activate(2);                          // update: make #2 active, others
 - `hashtag` drives the central content filter. `started_at` (YYYY-MM-DD) is the scrape
   start boundary. Only one campaign may be `active` at a time (the bot enforces this).
 
-Templates are committed as `db/model/Kol/kols.example.json` and
-`db/model/Campaign/campaigns.example.json`. The real files are gitignored (they hold
-real KOL handles) — see [Setup](#setup).
+Templates are committed as `db/kols.example.json` and `db/campaigns.example.json`. The
+real files are gitignored (they hold real KOL handles) — see [Setup](#setup).
 
 ---
 
@@ -265,8 +260,8 @@ cp .env.example .env
 #    edit .env: APIFY_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_IDS, YOUTUBE_API_KEY (optional)
 
 # 3. create the master data files from the templates
-cp db/model/Kol/kols.example.json db/model/Kol/kols.json
-cp db/model/Campaign/campaigns.example.json db/model/Campaign/campaigns.json
+cp db/kols.example.json db/kols.json
+cp db/campaigns.example.json db/campaigns.json
 #    edit them for your KOLs + campaign (or manage KOLs/campaigns later via the bot)
 ```
 
