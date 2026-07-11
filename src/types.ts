@@ -6,8 +6,7 @@
 // normalized content the adapters produce (ContentRecord) and the diagnostics/results
 // that flow through RecapService.
 
-import type { Kol } from '../db/model/Kol.js';
-import type { Campaign } from '../db/model/Campaign.js';
+import type { Kol, Campaign } from '../db/index.js';
 
 export type { Kol, Campaign };
 

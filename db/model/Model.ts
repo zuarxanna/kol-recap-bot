@@ -10,7 +10,7 @@
 // with DATA_DIR.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 
 const DATA_DIR = process.env.DATA_DIR ?? resolve(process.cwd(), 'db');
 
@@ -37,8 +37,9 @@ const readRows = (table: string): ModelRow[] =>
 
 /** Overwrite a table's JSON array (pretty-printed, trailing newline). */
 const writeRows = (table: string, rows: ModelRow[]): void => {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(fileFor(table), JSON.stringify(rows, null, 2) + '\n');
+  const file = fileFor(table);
+  mkdirSync(dirname(file), { recursive: true }); // table may be a nested path (model/Kol/kols.json)
+  writeFileSync(file, JSON.stringify(rows, null, 2) + '\n');
 };
 
 /** Next integer id for a set of rows: max(id) + 1, or 1 when empty. */

@@ -55,7 +55,7 @@ While a `/recap` is running, a second `/recap` is rejected (prevents double-spen
 | `/delkol <id>` | `/delkol 3` — asks for inline confirmation before deleting |
 
 `/addkol` only sets the Instagram handle. To add a TikTok or YouTube handle to a KOL,
-edit `db/kols.json` directly (set `tiktok_username` / `youtube_channel`), bare — no
+edit `db/model/Kol/kols.json` directly (set `tiktok_username` / `youtube_channel`), bare — no
 `@`. The change is picked up on the next command; no restart needed.
 
 ### Managing campaigns

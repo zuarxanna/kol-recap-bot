@@ -1,8 +1,8 @@
 // Campaign.ts — a campaign master record. Extends Model (JSON-file-backed CRUD).
 // Exactly one campaign is "active" at a time (enforced by activate()).
 
-import { Model } from './Model.js';
-import type { ModelRow } from './Model.js';
+import { Model } from '../Model.js';
+import type { ModelRow } from '../Model.js';
 
 export type CampaignStatus = 'active' | 'ended';
 
@@ -19,7 +19,7 @@ export interface CampaignRow extends ModelRow {
 
 /** A campaign, backed by db/campaigns.json. */
 export class Campaign extends Model implements CampaignRow {
-  static override table = 'campaigns.json';
+  static override table = 'model/Campaign/campaigns.json';
 
   name: string;
   hashtag: string;
