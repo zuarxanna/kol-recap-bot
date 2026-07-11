@@ -1,0 +1,19 @@
+# deps are reinstalled in the image (npm ci) — do not copy host node_modules
+node_modules
+npm-debug.log
+
+# secrets — passed via env_file, do NOT bake into the image
+.env
+
+# ephemeral output (bind-mounted at runtime)
+out
+
+# noise
+.git
+.gitignore
+*.md
+scratchpad
+_*.mjs
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,23 @@
+services:
+  bot:
+    build: .
+    image: kol-recap-bot
+    container_name: kol-recap-bot
+
+    # Secrets from .env (do NOT bake into the image): APIFY_TOKEN, TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_ALLOWED_IDS, YOUTUBE_API_KEY.
+    env_file: .env
+
+    # Proper PID 1: tini forwards SIGINT/SIGTERM -> bot.stop() graceful (the bot has a handler).
+    init: true
+
+    # Crash/reboot -> auto up again (the bot is already crash-resistant; this is the last layer).
+    restart: unless-stopped
+
+    volumes:
+      # db/ MUST PERSIST — the bot writes kols/campaigns (/addkol, /activate, etc.). REQUIRED.
+      - ./db:/app/db
+      # out/ recap CSVs — so they can be inspected from the host. Optional.
+      - ./out:/app/out
+
+    # Long-polling to Telegram -> no ports/expose needed.

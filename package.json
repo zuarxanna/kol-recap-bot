@@ -1,0 +1,15 @@
+{
+  "name": "kol-recap-bot",
+  "version": "0.0.1",
+  "description": "KOL metrics recap — Telegram bot + Apify + YouTube Data API, local JSON storage",
+  "type": "module",
+  "scripts": {
+    "recap": "node src/recap.js",
+    "bot": "node src/bot.js"
+  },
+  "dependencies": {
+    "apify-client": "^2.9.3",
+    "dotenv": "^17.4.2",
+    "telegraf": "^4.16.3"
+  }
+}
