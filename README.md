@@ -264,6 +264,25 @@ Get a key: **[console.cloud.google.com](https://console.cloud.google.com) → en
 YouTube is **optional**: without `YOUTUBE_API_KEY` set, it is skipped and the recap
 still runs on IG + TikTok.
 
+### Cost & the Apify free tier
+
+Apify's free plan includes **$5 of platform credit every month** (renews monthly, no
+card required). Instagram + TikTok are the only paid part (~$0.001–0.009 per profile
+scrape); YouTube runs on the free Data API and never touches this credit.
+
+One `/recap` scrapes every KOL on each platform they have a handle for. For **N** KOLs
+with both an IG and a TikTok handle, a run is roughly `2N × $0.001–0.009`:
+
+| KOLs (IG + TikTok) | ~cost / run | free runs / month ($5) |
+| --- | --- | --- |
+| 5  | $0.01–0.09 | ~55–500 |
+| 10 | $0.02–0.18 | ~28–250 |
+| 25 | $0.05–0.45 | ~11–100 |
+
+The range is wide because per-scrape cost scales with how much each profile returns.
+Treat the table as a ballpark — the bot prints the real `cost $X` after every run, so
+calibrate from one actual run rather than trusting the estimate.
+
 ---
 
 ## The output CSV (team template, 21 columns)
@@ -382,4 +401,11 @@ TypeScript, no dev dependencies). You do not run `npm run build` yourself for Do
   is caught by the manual audit.
 - YouTube Shorts detection is a duration heuristic (≤60s); Shorts of 61s–3min are
   labeled `Video` and fixed manually.
-```
+
+---
+
+## Credits
+
+Built by [zuarxanna](https://github.com/zuarxanna), co-authored with
+[Claude Code](https://claude.com/claude-code) (Anthropic). Licensed under
+[MIT](./LICENSE).
