@@ -51,12 +51,27 @@ While a `/recap` is running, a second `/recap` is rejected (prevents double-spen
 
 | Command | Example |
 | --- | --- |
-| `/addkol Name \| ig_username` | `/addkol Jane Rider \| janerider_demo` |
+| `/addkol Name \| ig \| tiktok \| youtube` | `/addkol Jane Rider \| janerider_demo \| janerider_demo \| janerider_demo` |
+| `/setkol <id> \| field \| handle` | `/setkol 3 \| tt \| sibangcan_demo` |
 | `/delkol <id>` | `/delkol 3` — asks for inline confirmation before deleting |
 
-`/addkol` only sets the Instagram handle. To add a TikTok or YouTube handle to a KOL,
-edit `db/kols.json` directly (set `tiktok_username` / `youtube_channel`), bare — no
-`@`. The change is picked up on the next command; no restart needed.
+**`/addkol`** takes the name plus up to three handles — Instagram, TikTok, YouTube, in
+that order, separated by `|`. Only the name and **at least one** handle are required;
+leave a slot blank (or omit it) to skip that platform:
+
+- `/addkol Jane Rider | janerider_demo` → Instagram only.
+- `/addkol Jane Rider | | | janerider_demo` → YouTube only (IG + TikTok blank).
+
+**`/setkol`** sets or clears one handle on an existing KOL. `field` is `ig`, `tt`, or
+`yt`. A **blank handle clears** that platform:
+
+- `/setkol 3 | tt | sibangcan_demo` → set KOL #3's TikTok handle.
+- `/setkol 3 | yt |` → clear KOL #3's YouTube handle.
+
+You may paste a handle as `@name` or a full profile URL (e.g.
+`https://www.tiktok.com/@name`); the bot stores it bare. A handle already used by
+another KOL on the same platform is rejected. Changes are picked up on the next command;
+no restart needed.
 
 ### Managing campaigns
 

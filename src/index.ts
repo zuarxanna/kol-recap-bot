@@ -2,7 +2,18 @@ import 'dotenv/config';
 import { Telegraf, Markup, Context } from 'telegraf';
 import { runRecap } from './recap/index.js';
 import { Campaign, Kol } from './model/index.js';
+import type { KolHandleField } from './model/index.js';
 import type { ContentRecord, KolResult } from './types.js';
+
+/**
+ * Map a `/setkol` field alias to the actual {@link Kol} handle column. Operators type the
+ * short code `ig` / `tt` / `yt` instead of the raw field name.
+ */
+const HANDLE_FIELDS: Record<string, KolHandleField> = {
+  ig: 'ig_username',
+  tt: 'tiktok_username',
+  yt: 'youtube_channel',
+};
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_IDS } = process.env;
 
@@ -203,7 +214,8 @@ const HELP = [
   '/kols — list all KOLs',
   '',
   '<b>Manage KOLs</b>',
-  '<code>/addkol Name | ig_username</code>',
+  '<code>/addkol Name | ig | tiktok | youtube</code> — name + at least one handle',
+  '<code>/setkol &lt;id&gt; | ig|tt|yt | handle</code> — set/clear one handle',
   '<code>/delkol &lt;id&gt;</code> — needs confirmation',
   '',
   '<b>Manage campaigns</b>',
@@ -275,16 +287,59 @@ bot.command('recap', async (ctx) => {
   return undefined;
 });
 
-// --- /addkol Name | ig_username ---
+// --- /addkol Name | ig | tiktok | youtube (handles optional; needs >=1) ---
 bot.command('addkol', (ctx) => {
   const argsText = commandText(ctx).replace(/^\/addkol(@\S+)?\s*/, '');
-  const [name, ig] = argsText.split('|').map((part) => part.trim());
-  if (!name || !ig) return say(ctx, 'Format: <code>/addkol Full Name | ig_username</code>');
-  if (Kol.findByIg(ig)) {
-    return say(ctx, `A KOL with ig <code>@${esc(ig)}</code> already exists.`);
+  const [name, igRaw, tiktokRaw, youtubeRaw] = argsText.split('|').map((part) => part.trim());
+  const format = 'Format: <code>/addkol Full Name | ig | tiktok | youtube</code>\nName + at least one handle. Leave a slot blank to skip that platform.';
+  if (!name) return say(ctx, format);
+
+  const igUsername = Kol.sanitizeHandle(igRaw ?? '');
+  const tiktokUsername = Kol.sanitizeHandle(tiktokRaw ?? '');
+  const youtubeChannel = Kol.sanitizeHandle(youtubeRaw ?? '');
+  if (!igUsername && !tiktokUsername && !youtubeChannel) return say(ctx, format);
+
+  // Dedup PER PLATFORM: a create is rejected only if one of the given handles already
+  // belongs to another KOL on that same platform (no silent IG-only requirement).
+  const givenHandles: ReadonlyArray<readonly [KolHandleField, string, string]> = [
+    ['ig_username', igUsername, 'ig'],
+    ['tiktok_username', tiktokUsername, 'tiktok'],
+    ['youtube_channel', youtubeChannel, 'yt'],
+  ];
+  for (const [field, value, label] of givenHandles) {
+    if (!value) continue;
+    const existing = Kol.findByHandle(field, value);
+    if (existing) {
+      return say(ctx, `${label} <code>@${esc(value)}</code> already used by #${existing.id} ${esc(existing.name)}.`);
+    }
   }
-  const kol = new Kol({ name, ig_username: ig }).save();
+
+  const kol = new Kol({ name, ig_username: igUsername, tiktok_username: tiktokUsername, youtube_channel: youtubeChannel }).save();
   return say(ctx, `✅ Added:\n${fmtKol(kol)}`);
+});
+
+// --- /setkol <id> | field | handle — set/clear one platform handle on an existing KOL ---
+bot.command('setkol', (ctx) => {
+  const argsText = commandText(ctx).replace(/^\/setkol(@\S+)?\s*/, '');
+  const [idRaw, fieldRaw, valueRaw] = argsText.split('|').map((part) => part.trim());
+  const id = Number(idRaw);
+  const field = HANDLE_FIELDS[String(fieldRaw ?? '').toLowerCase()];
+  if (!id || !field) {
+    return say(ctx, 'Format: <code>/setkol &lt;id&gt; | ig|tt|yt | handle</code>\nBlank handle clears that platform.');
+  }
+  const kol = Kol.find(id);
+  if (!kol) return say(ctx, `KOL #${id} does not exist.`);
+
+  const value = Kol.sanitizeHandle(valueRaw ?? '');
+  if (value) {
+    const existing = Kol.findByHandle(field, value);
+    if (existing && existing.id !== id) {
+      return say(ctx, `That handle is already used by #${existing.id} ${esc(existing.name)}.`);
+    }
+  }
+  kol[field] = value; // "" clears the platform (canHandle then skips it)
+  kol.save();
+  return say(ctx, `✅ Updated:\n${fmtKol(kol)}`);
 });
 
 // --- /delkol <id> -> inline confirmation ---
