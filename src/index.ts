@@ -71,12 +71,12 @@ const esc = (value: unknown): string =>
   String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
- * Format a number for chat display (en-US grouping, e.g. `649,644`). CSV stays raw.
- * @param value - The value to format.
- * @returns The grouped string, or `"-"` for empty/nullish.
+ * Format a metric for chat display (en-US grouping, e.g. `649,644`). CSV stays raw.
+ * @param value - The metric (a count, or `null` when the platform does not expose it).
+ * @returns The grouped string, or `"-"` for a `null` metric.
  */
-const num = (value: number | string): string =>
-  typeof value === 'number' ? value.toLocaleString('en-US') : value === '' || value == null ? '-' : String(value);
+const num = (value: number | null): string =>
+  typeof value === 'number' ? value.toLocaleString('en-US') : '-';
 
 /**
  * Reply with the shared HTML options merged in.

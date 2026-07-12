@@ -10,8 +10,10 @@ import type { Kol, Campaign } from './model/index.js';
  */
 export type { Kol, Campaign };
 
-/** A metric value: a real count, or `""` when the platform does not expose it. */
-export type Metric = number | string;
+/** A metric value: a real count, or `null` when the platform does not expose it
+ * (hidden likes, disabled comments, a failed fetch). `null` is written to the CSV as an
+ * empty cell. */
+export type Metric = number | null;
 
 /**
  * A single normalized piece of content, as returned by an adapter PRE hashtag-filter.
@@ -101,8 +103,8 @@ export interface RunOptions {
   onKolDone?: (result: KolResult) => void | Promise<void>;
 }
 
-/** One CSV row as an array of cells (strings or raw integers). */
-export type CsvRow = Array<string | number>;
+/** One CSV row as an array of cells (strings, raw integers, or `null` = empty cell). */
+export type CsvRow = Array<string | number | null>;
 
 /** The full result of a recap run. */
 export interface RecapResult {

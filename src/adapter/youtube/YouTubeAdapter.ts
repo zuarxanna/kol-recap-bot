@@ -204,9 +204,9 @@ export class YouTubeAdapter extends PlatformAdapter {
       handle, // without @; CsvWriter renders `@handle`
       title: this.#toTitle(video.snippet?.title),
       url: `https://www.youtube.com/watch?v=${video.id ?? ''}`,
-      views: stats.viewCount != null ? Number(stats.viewCount) : '',
-      likes: stats.likeCount != null ? Number(stats.likeCount) : '', // '' when likes are hidden
-      comments: stats.commentCount != null ? Number(stats.commentCount) : '', // '' when comments are disabled
+      views: stats.viewCount != null ? Number(stats.viewCount) : null,
+      likes: stats.likeCount != null ? Number(stats.likeCount) : null, // null when likes are hidden
+      comments: stats.commentCount != null ? Number(stats.commentCount) : null, // null when comments are disabled
       date: this.#toWibDate(video.snippet?.publishedAt),
       // YouTube has no structured hashtag array -> extract from title+description (NOT snippet.tags)
       hashtags: this.#extractHashtags(`${video.snippet?.title || ''}\n${video.snippet?.description || ''}`),

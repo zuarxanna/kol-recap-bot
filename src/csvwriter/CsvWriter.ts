@@ -6,23 +6,24 @@ import type { Campaign, ContentRecord, CsvRow } from '../types.js';
  * Writes normalized records to the team's 21-column recap CSV template.
  *
  * @remarks
- * Manual columns (Kode, Product, Brand, Type Content, Tone Article, Value, Name of
- * Event, ID) are left blank to be filled in the spreadsheet after export. Numbers
- * (View/Commentar) are RAW integers so the spreadsheet can compute on them; dates are
- * `DD/MM/YYYY`; Month Entry is English. There is no hashtag/likes column (not in the
- * template) — hashtags remain an internal filter concern only.
+ * Manual columns (code, product, brand, type content, tone article, value, ID) are left
+ * blank to be filled in the spreadsheet after export. `name of event` is auto-filled with
+ * the active campaign's name. Numbers (views/commentars) are RAW integers so the
+ * spreadsheet can compute on them; dates are `DD/MM/YYYY`; month entry is English. There
+ * is no hashtag/likes column (not in the template) — hashtags remain an internal filter
+ * concern only.
  *
- * The {@link CsvWriter.HEADER} strings intentionally match the client's actual
- * spreadsheet (Indonesian labels, the `"Commentar(s)"` typo included) and must NOT be
- * translated.
+ * The {@link CsvWriter.HEADER} strings must match the client's actual spreadsheet EXACTLY
+ * (their sheet maps columns BY NAME). Any rename here requires the same rename there —
+ * including the current `"commentars"` / `"link articel/video"` spellings.
  */
 export class CsvWriter {
-  /** Team template column order (verbatim — matches the client sheet). */
+  /** Team template column order (verbatim — the client sheet maps BY NAME). */
   static readonly HEADER: string[] = [
-    'Kode', 'Tanggal Rekap', 'Nama Blogger/Vlogger', 'Domain Blog/Vlog', 'Source',
-    'Source Type', 'Release Date', 'Month Entry', 'Title Article/Video', 'Link',
-    'Product', 'Brand', 'Type Content', 'Tone Article', 'Commentar(s)', 'View(s)',
-    'Value', 'Name of Event', 'JML', 'ID', 'YEAR',
+    'code', 'date', 'kol name', 'kol domain', 'source',
+    'source type', 'release date', 'month entry', 'title article/video', 'link articel/video',
+    'product', 'brand', 'type content', 'tone article', 'commentars', 'views',
+    'value', 'name of event', 'qty', 'ID', 'YEAR',
   ];
 
   /** English month abbreviations, indexed 0–11, for the Month Entry column. */
@@ -97,25 +98,25 @@ export class CsvWriter {
     const rows: CsvRow[] = records.map((record) => {
       const dateParts = this.#deriveDateParts(record.date);
       return [
-        '',                    // Kode — manual
-        recapDate,             // Tanggal Rekap
-        record.name,           // Nama Blogger/Vlogger
-        `@${record.handle}`,   // Domain Blog/Vlog
-        record.platform,       // Source
-        record.type,           // Source Type (IG='Reels')
-        dateParts.date,        // Release Date
-        dateParts.month,       // Month Entry
-        record.title,          // Title Article/Video
-        record.url,            // Link
-        '',                    // Product — manual
-        '',                    // Brand — manual
-        '',                    // Type Content — manual
-        '',                    // Tone Article — manual
-        record.comments,       // Commentar(s)
-        record.views,          // View(s)
-        '',                    // Value — manual
-        '',                    // Name of Event — manual
-        1,                     // JML
+        '',                    // code — manual
+        recapDate,             // date (recap run date)
+        record.name,           // kol name
+        `@${record.handle}`,   // kol domain
+        record.platform,       // source
+        record.type,           // source type (IG='Reels')
+        dateParts.date,        // release date
+        dateParts.month,       // month entry
+        record.title,          // title article/video
+        record.url,            // link articel/video
+        '',                    // product — manual
+        '',                    // brand — manual
+        '',                    // type content — manual
+        '',                    // tone article — manual
+        record.comments,       // commentars
+        record.views,          // views
+        '',                    // value — manual
+        campaign.name,         // name of event (auto: active campaign name)
+        1,                     // qty
         '',                    // ID — manual
         dateParts.year,        // YEAR
       ];

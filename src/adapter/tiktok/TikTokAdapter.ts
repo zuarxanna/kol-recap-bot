@@ -140,9 +140,9 @@ export class TikTokAdapter extends PlatformAdapter {
       handle,
       title: this.#toTitle(item.text),
       url: item.webVideoUrl ?? '',
-      views: item.playCount ?? '', // playCount = the real views (verified)
-      likes: item.diggCount ?? '',
-      comments: item.commentCount ?? '',
+      views: item.playCount ?? null, // playCount = the real views (verified)
+      likes: item.diggCount ?? null,
+      comments: item.commentCount ?? null,
       date: this.#toWibDate(item.createTimeISO),
       // hashtags: [{name}] -> [lowercase string]. RecapService's filter needs this array.
       hashtags: Array.isArray(item.hashtags)

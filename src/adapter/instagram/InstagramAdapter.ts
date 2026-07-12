@@ -114,9 +114,9 @@ export class InstagramAdapter extends PlatformAdapter {
       handle,
       title: this.#toTitle(item.caption),
       url: item.url ?? '',
-      views: item.videoPlayCount ?? '', // videoPlayCount = the real number
-      likes: item.likesCount ?? '',
-      comments: item.commentsCount ?? '',
+      views: item.videoPlayCount ?? null, // videoPlayCount = the real number
+      likes: item.likesCount ?? null,
+      comments: item.commentsCount ?? null,
       date: this.#toWibDate(item.timestamp),
       hashtags: Array.isArray(item.hashtags) ? item.hashtags.map((tag) => String(tag).toLowerCase()) : [],
     };

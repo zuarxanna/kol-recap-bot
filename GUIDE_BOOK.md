@@ -93,8 +93,8 @@ live — there is always **exactly one** active campaign.
 3. Run `/recap`. Watch the per-KOL cards stream in.
 4. When it finishes, the bot sends a summary line and the **CSV document**. Download it.
 5. Open the CSV in the team spreadsheet and:
-   - fill the **manual columns** — Kode, Product, Brand, Type Content, Tone Article,
-     Value, Name of Event, ID;
+   - fill the **manual columns** — code, product, brand, type content, tone article,
+     value, ID (name of event is auto-filled with the campaign name);
    - **audit each KOL**: add any content the hashtag filter missed (posts the KOL did
      not tag), and remove any off-campaign post that happened to use the tag;
    - add TikTok/YouTube rows for any KOL whose handle you have not registered yet.

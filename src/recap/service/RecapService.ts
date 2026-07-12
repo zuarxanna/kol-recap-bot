@@ -175,8 +175,9 @@ export class RecapService {
    * Build a placeholder row for a KOL whose fetch failed.
    *
    * @remarks
-   * Identity is filled; data fields use `"-"` (a VISIBLE "failed / fill manually"
-   * marker, not blank/0). `date` stays `""` so CsvWriter blanks Release Date/Month/YEAR
+   * Identity is filled; `type`/`title`/`url` use `"-"` (a VISIBLE "failed / fill
+   * manually" marker) while the numeric metrics are `null` (empty CSV cells — `Metric`
+   * is `number | null`). `date` stays `""` so CsvWriter blanks Release Date/Month/YEAR
    * (it cannot parse `"-"`). `hashtags` is `[]` so it would not pass the filter (it is
    * pushed directly).
    *
@@ -193,9 +194,9 @@ export class RecapService {
       handle: diagnostic.handle || adapter.getHandleFor(kol),
       title: '-',
       url: '-',
-      views: '-',
-      likes: '-',
-      comments: '-',
+      views: null,
+      likes: null,
+      comments: null,
       date: '',
       hashtags: [],
     };
